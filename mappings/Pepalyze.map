@@ -1,0 +1,102 @@
+GlobalNullTerminator:lockDataTable
+GlobalNullTerminator:secretDataTable
+:21:Pepalyze
+21:0:3:Name
+21:1:1:ID
+21:2:4:GiveItemOrLuigi # also true for luigi although he does not give an item
+# true for all things except the lightbulb
+21:3:4:PlayThingAnimation
+21:4:4:Scrap # use the scrap inventory page instead of the sticker page
+# true for all secret doors (type "M")
+21:5:4:EnableSecretDoor
+21:6:4:Unknown_Bool_6 # false for scrap and luigi
+21:7:4:Unknown_Bool_7 # toggle animation? or run script / event?
+21:8:4:IsSecretBlock # true only for hidden blocks
+21:9:4:Unknown_Bool_9
+21:10:1:SpecialType # 0 for default, 1 for wiggler pieces, 2 for finding luigi
+21:11:3:Map
+# Guess, might have a different purpose
+21:12:3:LocationMarker # null for secret blocks
+21:13:0:NullFloat13 # always 0.0
+21:14:0:NullFloat14 # always 0.0
+21:15:0:NullFloat15 # always 0.0
+21:16:0:Unknown_Float_16
+21:17:0:Unknown_Float_17
+21:18:0:Unknown_Float_18
+21:19:0:Unknown_Float_19
+21:20:0:Unknown_Float_20
+# "L": lock, require thing
+# "F": ?, require scrap
+# "S": require sticker
+# "M": secret door
+21:21:3:Type
+21:22:0:Unknown_Float_22 # almost always 0.0, -90.0 for tower and w5_mag rock
+21:23:0:Unknown_Float_23
+21:24:0:NullFloat24 # always 0.0
+21:25:0:Unknown_Float_25
+21:26:0:Unknown_Float_26
+21:27:4:Unknown_Bool_27
+21:28:4:Unknown_Bool_28 # only true for 6 thing usages
+21:29:1:Unknown_Int_29 # only not 0 when Unknown_Bool_28 is true
+21:30:1:Unknown_Int_30 # only not 0 when Unknown_Bool_28 is true
+21:31:0:Unknown_Float_31 # scale?
+21:32:0:PosX # 0.0 if Unknown_Bool_27 is false
+21:33:0:PosY # 0.0 if Unknown_Bool_27 is false
+21:34:0:PosZ # 0.0 if Unknown_Bool_27 is false
+21:35:0:Rotation # 0.0 if Unknown_Bool_27 is false
+21:36:0:Unknown_Float_36 # always 0.0
+21:37:0:Unknown_Float_37 # 0.0 if Unknown_Bool_27 is false
+21:38:0:Unknown_Float_38 # 0.0 if Unknown_Bool_27 is false
+21:39:0:Unknown_Float_39 # 0.0 if Unknown_Bool_27 is false
+21:40:3:InitFunction
+21:41:3:BeforeFunction
+21:42:3:AfterFunction
+21:43:3:CancelFunction
+21:44:3:Flag
+21:45:3:ControllObject # referred to as such in ksm scripts (as ctrlobj specifically)
+# not null for hidden blocks and the stolen goal star
+21:46:3:MapObjectToEnable
+21:47:3:RelatedLock
+21:48:1:W2TowerStickerPuzzleGroupID # only set in the w2 boss tower for the sticker placement puzzles
+# not null for the removed fountain on the main plaza (references green toad?)
+21:49:3:NPCToEnable
+21:50:0:Unknown_Float_50
+21:51:0:Unknown_Float_51
+21:52:0:Unknown_Float_52
+21:53:0:Unknown_Float_53
+21:54:0:Unknown_Float_54 # always 1.0
+21:55:0:Unknown_Float_55 # always 1.0
+21:56:0:Unknown_Float_56 # always 1.0
+21:57:3:ItemReward
+# What exactly do these values control?
+21:58:0:ItemRewardRotation1
+21:59:0:ItemRewardRotation2
+# Any of these items are valid solutions for a cutout
+21:60:3:ItemOption1
+21:61:3:ItemOption2
+21:62:3:ItemOption3
+21:63:3:ItemOption4
+21:64:3:ItemOption5
+21:65:3:ItemOption6
+21:66:3:ItemOption7
+21:67:3:ItemOption8
+21:68:3:ItemOption9
+21:69:3:ItemOption10
+21:70:3:ItemOption11 # always null
+21:71:3:ItemOption12 # always null
+# I'm neither sure what Secret nor SecretSeal are or do
+:22:Secret
+22:0:3:Input
+22:1:3:Result1
+22:2:1:Weight1
+22:3:3:Result2
+22:4:1:Weight2
+22:5:3:Result3
+22:6:1:Weight3
+22:7:3:Result4
+22:8:1:Weight4
+:23:SecretSeal
+23:0:3:Input
+23:1:3:Result1
+23:2:3:Result2
+23:3:3:Result3

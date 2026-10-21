@@ -1,0 +1,17 @@
+# This file does not have named arrays so the json will always be empty.
+# This map file is mainly here for completeness
+:21:UnknownStruct_21
+21:0:1:Unknown_Int_0
+21:1:2:Unknown_UInt_1
+21:2:0:Unknown_Float_2
+21:3:3:Unknown_String_3
+21:4:4:Unknown_Bool_4
+:22:UnknownStruct_22
+22:0:15:Unknown_StructArray_0
+22:1:15:Unknown_StructArray_1
+:23:UnknownStruct_23
+23:0:11:Unknown_IntArray_0
+23:1:12:Unknown_UIntArray_1
+23:2:10:Unknown_FloatArray_2
+23:3:13:Unknown_StringArray_3
+23:4:14:Unknown_BoolArray_4

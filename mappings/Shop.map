@@ -1,0 +1,13 @@
+GlobalNullTerminator:SHOP_TOWN
+GlobalNullTerminator:SHOP_IWA
+GlobalNullTerminator:SHOP_DOR
+GlobalNullTerminator:SHOP_SNOW
+GlobalNullTerminator:SHOP_KAZAN
+GlobalNullTerminator:SHOP_KOOPA
+GlobalNullTerminator:SHOP_MONO
+:21:ShopItem
+21:0:3:StickerName
+21:1:3:RequiredFlag
+21:2:8:NullShort_2          # always 0
+21:3:3:NullString_3         # always null
+21:4:13:NullStringArray_4   # always null

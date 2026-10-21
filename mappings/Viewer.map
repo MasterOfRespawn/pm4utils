@@ -1,0 +1,17 @@
+LengthParam:XML_TYPE_NUM:xml_type_data_list
+StructLengthParam:22:_3:_2
+StructLengthParam:23:_3:_2
+:21:Animation
+21:0:3:Name
+21:1:3:Description
+21:2:3:Author
+:22:Model
+22:0:3:Name
+22:1:3:Description
+22:2:15:Animations
+22:3:1:AnimationCount
+:23:Collection
+23:0:3:Name
+23:1:3:Directory
+23:2:15:Elements
+23:3:1:ElementCount

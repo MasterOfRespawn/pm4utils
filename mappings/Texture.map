@@ -1,0 +1,34 @@
+StructLengthParam:22:_4:_3
+GlobalNullTerminator:textureResourceDataTable
+GlobalNullTerminator:textureCaptureDataTable
+:21:UnknownStruct_21
+21:0:3:Unknown_String_0
+21:1:3:Unknown_String_1
+21:2:1:Unknown_Int_2
+21:3:0:Unknown_Float_3
+21:4:0:Unknown_Float_4
+21:5:0:Unknown_Float_5
+21:6:0:Unknown_Float_6
+21:7:0:Unknown_Float_7
+21:8:0:Unknown_Float_8
+21:9:0:Unknown_Float_9
+21:10:0:Unknown_Float_10
+21:11:0:Unknown_Float_11
+:22:TextureResource
+22:0:3:Unknown_String_0
+22:1:3:Unknown_String_1
+22:2:3:Unknown_String_2
+22:3:15:Unknown_StructArray_3 # struct 21
+22:4:1:Unknown_StructArray_3_Length
+:23:TexturecaptureData
+23:0:3:Directory
+23:1:3:FileName # "■■■ filename ■■■" to indicate section start ?
+23:2:3:Animation # ?
+23:3:1:Unknown_Int_3
+23:4:0:Unknown_Float_4
+23:5:0:Unknown_Float_5
+23:6:0:Unknown_Float_6
+23:7:0:Unknown_Float_7
+23:8:0:Unknown_Float_8
+23:9:0:Unknown_Float_9
+23:10:1:Unknown_Int_10

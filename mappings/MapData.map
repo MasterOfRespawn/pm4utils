@@ -1,0 +1,50 @@
+LengthParam:mapDataTableLen:mapDataTable
+GlobalNullTerminator:mapDataTable
+:21:Map
+21:0:3:Name
+21:1:3:Level
+21:2:3:ModelPath            # model?
+21:3:3:Type                 # "map_anime" or null
+21:4:3:NullString4          # always null
+# most likely a bitfield but I am not entirely certain
+#  0: 
+# - no world animations, battles work
+# - cleared w3 still appears poisoned
+#  1: 
+# - emulator crash when entering sling a thing
+# - freeze when hitting the cardboard the one toad lies on at the start of the game
+# - 1-1 does not load
+# - battles seem to still work
+#  2:
+# - sniffit or whiffit does not load, neither does sling a thing
+# - 1-1 loads
+# - world 3 does not load period
+# - entering combat freezes the game
+#  4: cutscenes / animations + battles
+#  8: battles + ?
+# 16: 
+#-USED_VALUES-
+#  0: (invalid) unfinished areas / world map
+#  5: seemingly default (whatever it does)
+#  6: Sniffit or Whiffit minigames
+#  8: mostly world 3
+# 10: intro plaza, 2d desert maze, w5_bos_05
+# 20: w5_bos_02
+21:5:1:Mode                 # breaks some levels when set incorrectly
+21:6:3:Background           # skybox
+21:7:3:Background2          # skybox parameter?
+21:8:3:ScriptPath
+21:9:1:DialogueID           # setting this to the wrong value blanks out all map specific npc dialog boxes
+21:10:3:BGM
+21:11:3:SoundEnv
+21:12:3:BGM2                # what is this purpose?
+21:13:3:SoundEnv2           # what is this purpose?
+21:14:3:SoundGroup          # ? these are the only strings that align with this
+21:15:3:Effect              # lookup for kdm_sound effectDataTable
+21:16:3:EffectDelay         # lookup for kdm_sound effectDataTable
+# is this a bit field? (most likely)
+# 0: default
+# 1: only move left and right: most 2d sections
+# 2: unknown purpose: inside cave / underground (secret doors, decalburg houses, museum, w4 boss waiting hall, w4 shop)
+# 4: unknown purpose: w1,w2,w3,w5 bosses + yoshi sphinx exterior (kamek fight)
+21:17:1:AttributeBits      # LevelType?

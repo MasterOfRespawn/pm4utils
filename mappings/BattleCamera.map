@@ -1,0 +1,17 @@
+GlobalNullTerminator:eventCameraDataTable
+:21:Camera
+21:0:3:Name
+21:1:8:Unknown_Short_1
+21:2:8:Unknown_Short_2
+21:3:8:Unknown_Short_3
+21:4:8:Unknown_Short_4
+21:5:8:Unknown_Short_5
+21:6:8:Unknown_Short_6
+21:7:0:Unknown_Float_7
+21:8:0:Unknown_Float_8
+21:9:0:Unknown_Float_9
+21:10:8:Unknown_Short_10
+21:11:8:Unknown_Short_11
+:22:UnusedStruct22
+22:0:3:UnusedString0
+22:1:13:UnusedStringArray1

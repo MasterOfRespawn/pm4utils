@@ -1,0 +1,40 @@
+LengthParam:link_data_all_len:link_data_all
+StructLengthParam:22:LinkCount:Links
+:21:Link
+# 0 for bero transition (regular transition) (just transitions)
+# exit popup question is ignored
+# 1 for dokan transition (pipes)
+# 2 for doors (the only value doors actually function with)
+# 3 for world exits (bero and non bero) (always boots you to world map)
+# 4 for zone transitions (only used in 2 test maps)
+# 5 for level exits (both royal and goal)
+# 6 for save block continues (and main plaza autosave?) (no exit only enter)
+21:0:1:Type
+# Value range: [0;10]
+# 0: n  - north
+# 1: ne - north east
+# 2: e  - east
+# 3: se - south east
+# 4: s  - south
+# 5: sw - south west
+# 6: w  - west
+# 7: nw - north west
+# 8: u  - up
+# 9: d  - down
+# 10:   - event transitions (mario does not move)
+# -1 for types 4, 5 and 6 sicne those do not work based on direction
+21:1:1:Direction
+# 0  for door to non door connection
+# 1  for door to door connection
+# -1 for non doors
+21:2:1:DoorToDoor
+21:3:3:FromMap
+21:4:3:FromDoor
+21:5:3:ToMap
+21:6:3:ToDoor
+21:7:3:EnterFunction
+21:8:3:ExitFunction
+:22:Map
+22:0:3:Name
+22:1:20:Links
+22:2:1:LinkCount

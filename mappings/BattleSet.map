@@ -1,0 +1,34 @@
+StructLengthParam:22:_3:_2:NONULLTERM # EnemyCount = len(data)
+NullTerminator:22:_2 # enemies in encounter are null terminated
+GlobalNullTerminator:enemySetDataTable # encounter list itself is null terminated
+:21:EnemyData
+21:0:3:enemy
+21:1:8:position
+21:2:8:offsetX
+21:3:8:offsetY
+21:4:8:offsetZ
+21:5:8:unknownLong
+21:6:3:specialEnemyTag
+21:7:3:specialBattleType
+21:8:3:specialUnused
+21:9:1:unknown3
+:22:EncounterData
+22:0:3:name
+22:1:3:description
+22:2:15:data
+22:3:1:enemyCount
+22:4:3:battleMap1
+22:5:3:battleMap2
+22:6:3:battleMap3
+22:7:3:music
+22:8:3:unknown
+22:9:3:eventStage
+22:10:3:unknown2
+22:11:3:event
+22:12:3:eventMode
+22:13:3:unknown4
+22:14:4:doFreeBattleSpin
+22:15:7:runAwaySuccessPercentage
+22:16:8:levelClearCoinBonus
+22:17:4:disableBattleClear
+22:18:4:unknown7
