@@ -1,5 +1,9 @@
 GlobalNullTerminator:bmapDataTable
 NullTerminator:22:_3
+
+GlobalArrayType:bmapDataTable:15:22:-1
+StructArrayType:22:3:21
+
 :21:MapEffect
 21:0:3:LocationMarker
 21:1:0:ConstFloat1_1.0

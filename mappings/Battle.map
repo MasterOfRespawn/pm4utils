@@ -19,6 +19,47 @@ GlobalNullTerminator:posData
 NullTerminator:40:_37
 StructLengthParam:31:_2:_1:NONULLTERM
 
+
+GlobalArrayType:counterDataTable:15:22:-1
+StructArrayType:22:1:21
+GlobalArrayType:unitItemDataTable:15:35
+StructArrayType:35:2:34
+GlobalArrayType:adjustCostumeIDTable:3
+GlobalArrayType:unitPartsDataTable:15:30
+StructArrayType:30:71:26
+StructArrayType:30:72:27
+StructArrayType:27:0:8
+StructArrayType:30:73:28
+StructArrayType:30:74:29
+StructArrayType:30:75:22
+StructArrayType:30:76:25
+GlobalArrayType:unitDataTable:15:40
+StructArrayType:40:2:31
+StructArrayType:31:1:15:30
+StructArrayType:40:34:37
+StructArrayType:37:1:36
+StructArrayType:40:36:25
+StructArrayType:40:37:38
+StructArrayType:40:38:33:-1
+StructArrayType:40:39:33:-1
+StructArrayType:40:40:33:-1
+StructArrayType:40:41:35:-1
+StructArrayType:40:42:35:-1
+StructArrayType:33:1:32
+StructArrayType:40:43:39
+GlobalArrayType:weaponDataTable:15:48:-1
+StructArrayType:48:11:43:-1
+StructArrayType:43:0:7
+StructArrayType:48:12:42:-1
+StructArrayType:42:0:7
+StructArrayType:48:13:44:-1
+StructArrayType:48:14:45:-1
+StructArrayType:48:15:46:-1
+StructArrayType:48:16:47:-1
+GlobalArrayType:posData:41
+GlobalArrayType:acData:49:-1
+GlobalArrayType:drumList:15:1
+
 :21:DamageType # ?
 21:0:1:CounterIndex # 0 for no, array index for success
 21:1:3:CounterAttackName # Name in weaponDataTable

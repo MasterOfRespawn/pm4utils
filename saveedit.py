@@ -17,24 +17,23 @@ if TOOLTIPS_ENABLED:
         print("importing tooltips failed. Is idle installed?")
         TOOLTIPS_ENABLED = False
 
-# TODO: clean up
 # NOTE: Setting the inventory items to values of the wrong type will likely crash the game
 
 # config
 CHECK_LIMITS: bool = False
-TEMP_ITEM_TYPES: dict[int, int] = {0:0,1:0,2:0,3:65534}
-DROPDOWN_WIDTHS = 56
 
 # constants
+SAVEEDIT_VERSION = "0.2.0"
+
 SAVE_GS_START = 0x1a04
 SAVE_GF_START = 0x1b44
 SAVE_AS_START = 0x1d04
 SAVE_AF_START = 0x1e04
-SAVE_ITEM_AS_START = 0x1d04 # TODO: DOUBLE_CHECK FOR STICKER LISTS (??????)
-SAVE_ITEM_AF_START = 0x1e04 # TODO: DOUBLE_CHECK FOR STICKER LISTS (0x1e04)
 ITEM_PAGE_BASE_OFFSET: int = 0x01e0
 ITEM_PAGE_ITEM_COUNT: int = 15
 ITEM_PAGE_SIZE: int = 160
+THING_BASE_OFFSET = 0x0d58
+THING_TOTAL_COUNT = 64
 
 root: tk.Tk = tk.Tk()
 
@@ -64,6 +63,13 @@ MAP_NAMES: dict[str, list[str]] = {}
 ENTRANCE_NAMES: dict[str, list[str]] = {}
 ENCOUNTER_NAME_LIST: list[str] = [""]
 
+MAP_NPC_IDS: dict[str, dict[str,tuple[str,int]]] = {}
+
+PAPERIZE_MUSEUM_CHECK_NAMES = ["[DUMMY]"]
+PAPERIZE_CHECK_NAMES = ["[DUMMY]"]
+
+THING_UNLOCK_ORDER: dict[str, tuple[int, int]] = {}
+
 STRING_TYPE_LEVEL_REF_SELECT = -1
 STRING_TYPE_LEVEL_REF = 0
 STRING_TYPE_MAP_REF = 1
@@ -91,19 +97,21 @@ def init_options():
     global ENTRANCE_NAMES, MAP_NAMES, MAP_NAME_LIST
 
     DATAPATH = askdirectory(parent=root, initialdir=DEFAULT_DATA_PATH, title="Select data directory")
+    if DATAPATH == () or DATAPATH == "" or DATAPATH is None:
+        exit(1)
 
     # link data
     LINK_DATA = kdm.load(f"{DATAPATH}/kdm_link_data.bin")
-    for area in LINK_DATA["link_data_all"]["<KdmArrayValues>"]:
-        area = area["<KdmArrayValues>"][0]
+    for area in LINK_DATA["link_data_all"]:
+        area = area[0]
         ENTRANCE_NAMES[area["Name"]] = []
-        for link in area["Links"]["<KdmArrayValues>"]:
-            link = link["<KdmArrayValues>"][0]
+        for link in area["Links"]:
+            link = link[0]
             ENTRANCE_NAMES[area["Name"]].append(link["FromDoor"])
     
     WORLDMAP_DATA = kdm.load(f"{DATAPATH}/kdm_mapdata.bin")
-    for area in WORLDMAP_DATA["mapDataTable"]["<KdmArrayValues>"]:
-        area = area["<KdmArrayValues>"][0]
+    for area in WORLDMAP_DATA["mapDataTable"]:
+        area = area[0]
         if area["ModelPath"] is not None:
             temp = area["ModelPath"].split("/")[0]
             if temp in TEMP:
@@ -126,11 +134,14 @@ def init_options():
     ITEM_INDEX_LOOKUP["[EMPTY]"] = -1
     #ITEM_NAMES.append("[EMPTY]")
     ITEMS = kdm.load(f"{DATAPATH}/kdm_item_data.bin")
-    for i, item in enumerate(ITEMS["ItemDataSaveList"]["<KdmArrayValues>"]):
-        item = item["<KdmArrayValues>"][0]
+    for i, item in enumerate(ITEMS["ItemDataSaveList"]):
+        item = item[0]
         ITEM_NAMES.append(item["Name"])
         ITEM_INDEX_LOOKUP[item["Name"]] = i
         ITEM_TYPES[item["Name"]] = item["ItemVariant"]["VariantTypeEnum"]
+        if item["ItemVariant"]["VariantTypeEnum"] == 2:
+            offset = item["ItemVariant"]["VariantValue"][0]["Unknown_Int_3"]
+            THING_UNLOCK_ORDER[item["Name"]] = (0x0e60 + offset // 8, offset % 8)
     for i in range(8):
         ITEM_PAGES.append(f"StickerPage{i+1}")
     for i in range(9):
@@ -140,36 +151,41 @@ def init_options():
 
     # flags
     flaginfo = kdm.load(f"{DATAPATH}/kdm_switch.bin")
-    for flag in flaginfo["gfSwitchTable"]["<KdmArrayValues>"]:
+    for flag in flaginfo["gfSwitchTable"]:
         if flag["Name"].__contains__("_mobj_item_"): continue # dummy?
         FLAG_OFFSETS[flag["Name"]] = (SAVE_GF_START + flag["Offset"] // 8, flag["Offset"] % 8)
-    for switch in flaginfo["gsSwitchTable"]["<KdmArrayValues>"]:
+    for switch in flaginfo["gsSwitchTable"]:
         if switch["Name"].__contains__("_mobj_item_"): 
             continue # dummy?
         SWITCH_OFFSETS[switch["Name"]] = SAVE_GS_START + switch["Offset"]
-    for switch in flaginfo["asSwitchTable"]["<KdmArrayValues>"]:
+    for switch in flaginfo["asSwitchTable"]:
         if switch["Name"].__contains__("_mobj_item_"): 
             continue # dummy?
         AS_OFFSETS[switch["Name"]] = SAVE_AS_START + switch["Offset"]
     # NOTE: THESE ARE MAP SPECIFIC
-    for flag in flaginfo["afSwitchTable"]["<KdmArrayValues>"]:
+    for flag in flaginfo["afSwitchTable"]:
         if flag["Name"].__contains__("_mobj_item_"): continue # dummy?
         AF_OFFSETS[flag["Name"]] = (SAVE_AF_START + flag["Offset"] // 8, flag["Offset"] % 8)
     
     disposdata = kdm.load(f"{DATAPATH}/kdm_dispos_data.bin")
-    for level in disposdata["all_disposDataTbl"]["<KdmArrayValues>"]:
+    for level in disposdata["all_disposDataTbl"]:
         if level is None: break # null terminator
-        level = level["<KdmArrayValues>"][0]
+        level = level[0]
         if level["Name"] in ["CHECK", "TST"]: continue # debugging levels
-        for encounter in level["Encounters"]["<KdmArrayValues>"]:
+        for encounter in level["Encounters"]:
             if encounter is None: break # null terminator
-            encounter = encounter["<KdmArrayValues>"][0]
-            ENCOUNTER_NAME_LIST.append(encounter["Elements"]["<KdmArrayValues>"][0]["Name"])
+            encounter = encounter[0]
+            ENCOUNTER_NAME_LIST.append(encounter["Elements"][0]["Name"])
 
-        for area in level["MapObjects"]["<KdmArrayValues>"]:
+        for area in level["NPCs"]:
+            area = area[0]
+            MAP_NPC_IDS[area["Map"]] = {}
+            for npc in area["NPCs"]:
+                MAP_NPC_IDS[area["Map"]][npc["Name"]] = (npc["AssociatedEncounter"][0]["Name"] if npc["AssociatedEncounter"] is not None else "", npc["EncounterID"])
+        for area in level["MapObjects"]:
             if area is None: break # null terminator
-            area = area["<KdmArrayValues>"][0]
-            for obj in area["MapObjects"]["<KdmArrayValues>"]:
+            area = area[0]
+            for obj in area["MapObjects"]:
                 if obj is None: break # null terminator
                 if obj["FlagOffset"] != -1:
                     offset = obj["FlagOffset"]
@@ -190,10 +206,10 @@ def init_options():
                         offset = offset % 10000
                         A_MOBJ_SWITCH_OFFSETS[f'{level["Name"]} {area["Map"]} {obj["Type"]} {obj["Name"]}'] = SAVE_AS_START + offset
                     # offsets > 10000 are stored in asData (i think?)
-        for area in level["MapItems"]["<KdmArrayValues>"]:
+        for area in level["MapItems"]:
             if area is None: break # null terminator
-            area = area["<KdmArrayValues>"][0]
-            for item in area["Items"]["<KdmArrayValues>"]:
+            area = area[0]
+            for item in area["Items"]:
                 if item is None: break # null terminator
                 if item["FlagOffset"] != -1:
                     offset = item["FlagOffset"]
@@ -205,28 +221,55 @@ def init_options():
                         A_ITEM_FLAG_OFFSETS[f'{level["Name"]} {area["MapName"]} {item["Type"]} {item["Name"]}'] = (SAVE_AF_START + offset // 8, offset % 8)
                     # offsets > 10000 are stored in afData (i think?)
                 if item["TypeList"] is not None:
-                    typelist = item["TypeList"]["<KdmArrayValues>"][0]
+                    typelist = item["TypeList"][0]
                     offset1 = typelist["SwitchOffset"]
                     if offset1 < 10000: # gs?
                         ITEM2_SWITCH_OFFSETS[f'{level["Name"]} {area["MapName"]} {typelist["Name"]}'] = SAVE_GS_START + offset1
                     else:
                         offset1 = offset1 % 10000
-                        A_ITEM2_SWITCH_OFFSETS[f'{level["Name"]} {area["MapName"]} {typelist["Name"]}'] = SAVE_ITEM_AS_START + offset1
+                        A_ITEM2_SWITCH_OFFSETS[f'{level["Name"]} {area["MapName"]} {typelist["Name"]}'] = SAVE_AS_START + offset1
                     offset2 = typelist["FlagOffset"]
                     if offset2 < 10000: # gf?
                         ITEM2_FLAG_OFFSETS[f'{level["Name"]} {area["MapName"]} {typelist["Name"]}'] = (SAVE_GF_START + offset2 // 8, offset2 % 8)
                     else:
                         offset2 = offset2 % 10000
-                        A_ITEM2_FLAG_OFFSETS[f'{level["Name"]} {area["MapName"]} {typelist["Name"]}'] = (SAVE_ITEM_AF_START + offset2 // 8, offset2 % 8)
-GLOBAL_NAMES: list[str] = ["ENCOUNTER_NAME_LIST", "ITEM_PAGES", "ITEM_NAMES", "ITEM_INDEX_LOOKUP", "ITEM_TYPES", "FLAG_OFFSETS", "SWITCH_OFFSETS", "MOBJ_FLAG_OFFSETS", "MOBJ_SWITCH_OFFSETS", "ITEM_FLAG_OFFSETS", "ITEM2_SWITCH_OFFSETS", "ITEM2_FLAG_OFFSETS", "AS_OFFSETS", "AF_OFFSETS", "A_MOBJ_FLAG_OFFSETS", "A_MOBJ_SWITCH_OFFSETS", "A_ITEM_FLAG_OFFSETS", "A_ITEM2_SWITCH_OFFSETS", "A_ITEM2_FLAG_OFFSETS", "MAP_NAME_LIST", "MAP_NAMES", "ENTRANCE_NAMES"]
+                        A_ITEM2_FLAG_OFFSETS[f'{level["Name"]} {area["MapName"]} {typelist["Name"]}'] = (SAVE_AF_START + offset2 // 8, offset2 % 8)
+    pepa_data = kdm.load(f"{DATAPATH}/kdm_pepalyze.bin")
+    for lock in pepa_data["lockDataTable"]:
+        lock = lock[0]
+        if len(PAPERIZE_CHECK_NAMES) != lock["ID"]:
+            raise ValueError("paperize data not ID aligned")
+        PAPERIZE_CHECK_NAMES.append(lock["Name"])
+    pepa_data_m = kdm.load(f"{DATAPATH}/kdm_pepalyze_museum.bin")
+    for lock in pepa_data_m["lockDataTable"]:
+        lock = lock[0]
+        if len(PAPERIZE_MUSEUM_CHECK_NAMES) != lock["ID"]:
+            raise ValueError("paperize museum data not ID aligned")
+        PAPERIZE_MUSEUM_CHECK_NAMES.append(lock["Name"])
+
+GLOBAL_NAMES: list[str] = ["SAVEEDIT_VERSION", "ENCOUNTER_NAME_LIST", "ITEM_PAGES", 
+"ITEM_NAMES", "ITEM_INDEX_LOOKUP", "ITEM_TYPES", "FLAG_OFFSETS", "SWITCH_OFFSETS", 
+"MOBJ_FLAG_OFFSETS", "MOBJ_SWITCH_OFFSETS", "ITEM_FLAG_OFFSETS", "ITEM2_SWITCH_OFFSETS", 
+"ITEM2_FLAG_OFFSETS", "AS_OFFSETS", "AF_OFFSETS", "A_MOBJ_FLAG_OFFSETS", "A_MOBJ_SWITCH_OFFSETS", 
+"A_ITEM_FLAG_OFFSETS", "A_ITEM2_SWITCH_OFFSETS", "A_ITEM2_FLAG_OFFSETS", "MAP_NAME_LIST", 
+"MAP_NPC_IDS", "MAP_NAMES", "ENTRANCE_NAMES", "PAPERIZE_MUSEUM_CHECK_NAMES", "PAPERIZE_CHECK_NAMES",
+"THING_UNLOCK_ORDER"]
 CONSTANT_JSON_PATH = __file__.replace(".py", "_constants.json")
 def init_options_pregenerated():
     import json
     with open(CONSTANT_JSON_PATH, "r") as f: 
         constants = json.load(f)
+    if SAVEEDIT_VERSION is not None and ("SAVEEDIT_VERSION" not in constants or constants["SAVEEDIT_VERSION"] != SAVEEDIT_VERSION):
+        result = messagebox.showerror("incorrect saveedit_constants.json version", "The version of the constants json file does not match. Please redownload it or select the data directory of a sticker star rom dump to regenerate it now.", type=messagebox.OKCANCEL)
+        if result != "ok":
+            quit(1)
+        init_options()
+        dump_constants()
+        return
     globals_dict = globals()
     for g in GLOBAL_NAMES:
-        globals_dict[g] = constants[g]
+        if g in constants:
+            globals_dict[g] = constants[g]
 
 
 def dump_constants():
@@ -253,14 +296,21 @@ else:
     SAVE_SUFFIX = "sdmc/Nintendo 3DS/00000000000000000000000000000000/00000000000000000000000000000000/title/00040000/000a5f00/data/00000001/"
 DEFAULT_DATA_PATH = EMULATOR_PATH + DATA_SUFFIX if os.path.isdir(EMULATOR_PATH) else None
 DEFAULT_SAVE_PATH = EMULATOR_PATH + SAVE_SUFFIX if os.path.isdir(EMULATOR_PATH) else None
+ 
+# initialize with zeroes so nothing breaks until a file is loaded
+DATA = bytearray(0x26b0)
 
 # cache results instead of parsing all files every time
 # TODO: display info popup if json file is missing
 if (len(sys.argv) > 1 and sys.argv[1] == "dumpconstants"): 
     init_options()
     dump_constants()
+elif (len(sys.argv) > 1 and sys.argv[1] == "noconstants"): 
+    init_options()
 elif not os.path.isfile(CONSTANT_JSON_PATH):
-    messagebox.showerror("missing saveedit_constants.json", "Can not find constants json file. Please download it or select the data directory of a sticker star rom dump to generate it now.", type=messagebox.OKCANCEL)
+    result = messagebox.showerror("missing saveedit_constants.json", "Can not find constants json file. Please download it or select the data directory of a sticker star rom dump to generate it now.", type=messagebox.OKCANCEL)
+    if result != "ok":
+        quit(1)
     init_options()
     dump_constants()
 else:
@@ -273,28 +323,25 @@ def load_path():
     filename = askopenfilename(parent=root, title="select save file", initialdir=DEFAULT_SAVE_PATH, initialfile = "pm4_0.bin")
     load_data(filename)
 def load_data(filename: str):
-    global DATA, save_button, OPENED_PATH
+    global DATA, OPENED_PATH
     if filename is not None and filename != () and filename != "":
         with open(filename, "rb") as f:
-            DATA = bytearray(f.read())
+            d = f.read()
+            if len(d) != 0x26b0:
+                messagebox.showwarning("invalid save file", "file length does not match")
+                return
+            elif d[0:8] != b"\xF6\x04\x33\x01\x14\x07\x00\x00":
+                messagebox.showwarning("invalid save file", "invalid file header")
+                return
+            DATA = bytearray(d)
     else:
         return
     if len(DATA) == 0:
         return
     OPENED_PATH = filename
-    save_button['state'] = 'normal'
+    menubar.entryconfigure(2, state="normal")
     for callback in INIT_CALLBACKS:
         callback()
-    for i, ref in enumerate(STRINGREFS):
-        STRINGREFS[i][0]['state'] = 'normal'
-        s = read_string(i)
-        if i < 4:
-            s = s.upper()
-        STRINGREFS[i][0].set(s)
-    if STRINGREFS[5][0].get() == "wld":
-        STRINGREFS[4][0].set("WLD")
-    else:
-        STRINGREFS[4][0].set(STRINGREFS[3][0].get())
 
 def save_path():
     global DATA, OPENED_PATH
@@ -302,10 +349,7 @@ def save_path():
     # ensure all data has been saved
     for callback in CHANGE_CALLBACKS:
         callback()
-    for i, ref in enumerate(STRINGREFS):
-        write_string(i, STRINGREFS[i][0].get())
-    # player saved on world map insted of in level
-    write_bool(0x0144, 0, STRINGREFS[5][0].get() == "wld")
+    # save file
     filename = asksaveasfilename(parent=root, title="select save file", initialdir="/".join(path_parts[:-1]), initialfile = path_parts[-1])
     if filename is not None and filename != () and filename != "":
         with open(filename, "wb") as f:
@@ -347,16 +391,27 @@ def read_int(offset: int, bytecount:int = 1) -> int:
 def write_int(offset: int, value: int, bytecount: int = 1):
     struct.pack_into(SIGNED_INT_NAMES[bytecount], DATA, offset, value)
 
-file_controls = ttk.Frame(root)
+# temp, count uneditable bytes
+def file_debug():
+    t = []
+    for b in DATA:
+        if b not in t: t.append(b)
+    for i in range(257):
+        if i not in t: break
+    if i == 256: 
+        print("CAN NOT TEST")
+        return
+    for j in range(len(DATA)): DATA[j] = i if not (0x0ef4 <= j < 0x11f8 + 2048) and not (0x1a04 <= j < 0x1fc8) else 0
+    for c in CHANGE_CALLBACKS: c()
+    t = 0
+    for j, b in enumerate(DATA): t += b == i
+    print(f"{t}/{len(DATA)} bytes left unknown ({t/len(DATA)*100:.4}%)")
 
-# widget setup
-load_button = ttk.Button(file_controls, command=load_path, text="load file")
-load_button.grid(row=0, rowspan=1, column=0, columnspan=1)
-save_button = ttk.Button(file_controls, command=save_path, text="save file")
-save_button.grid(row=0, rowspan=1, column=1, columnspan=1) # column=13
-save_button['state'] = 'disabled'
-#file_controls.pack(anchor="nw")
-file_controls.grid(row=0, column=0, sticky="nw")
+menubar = tk.Menu(root)
+menubar.add_command(label="load", command=load_path)
+menubar.add_command(label="save", command=save_path, state="disabled")
+#menubar.add_command(label="count unknown bytes", command=file_debug)
+root.config(menu=menubar)
 
 def property_int(root, row: int, col: int, name: str, offset: int, 
 bytecount: int = 2, signed: bool = False, min: None|int = None, max: None|int = None, 
@@ -433,6 +488,37 @@ def property_uint(offset: int, bytes: int, name: str, tooltip: None|str=None, mi
 def property_sint(offset: int, bytes: int, name: str, tooltip: None|str=None, min: None|int = None, max: None|int = None, padding: int=0):
     global CURRENT_TAB_ROOT, CURRENT_COL, CURRENT_ROW
     property_int(CURRENT_TAB_ROOT, CURRENT_ROW, CURRENT_COL, name, offset, bytes, True, tooltip=tooltip, padding=padding)
+    CURRENT_ROW += 1
+def property_sint_enum(offset: int, bytes: int, name: str, keyvalues: dict[str, int], tooltip: None|str=None):
+    global CURRENT_TAB_ROOT, CURRENT_COL, CURRENT_ROW
+    c = CURRENT_COL
+    if name is not None and name != "":
+        ttk.Label(CURRENT_TAB_ROOT, text=name).grid(row=CURRENT_ROW, column=c)
+        c += 1
+    keys = [k for k in keyvalues.keys()]
+
+    value = tk.StringVar()
+    dropdown = ttk.Combobox(CURRENT_TAB_ROOT, values=keys, textvariable=value, width=11)
+    dropdown.grid(row=CURRENT_ROW, column=c)
+
+    if TOOLTIPS_ENABLED and tooltip is not None:
+        Hovertip(dropdown, tooltip)
+    dropdown["state"] = "disabled"
+
+    def save(): 
+        v = value.get()
+        if v in keyvalues:
+            write_int(offset, keyvalues[v], bytes)
+    def load():
+        nonlocal dropdown
+        dropdown["state"] = "normal"
+        v = read_int(offset, bytes)
+        value.set("")
+        for k in keyvalues:
+            if keyvalues[k] == v: value.set(k)
+        #if value.get() == "": print(v)
+    CHANGE_CALLBACKS.append(save)
+    INIT_CALLBACKS.append(load)
     CURRENT_ROW += 1
 def property_bool(offset: int, index: int, name: str, tooltip: None|str=None, thin: bool = False):
     global CURRENT_TAB_ROOT, CURRENT_COL, CURRENT_ROW
@@ -550,19 +636,40 @@ def property_date(row=1, col=0, offset=0x0028):
 def on_level_changed(index, value, op):
     global STRINGREFS
     level = STRINGREFS[4][1].get()
-    STRINGREFS[5][0]["values"] = MAP_NAMES[level] if level in MAP_NAMES else ["wld"]
-    STRINGREFS[5][0].current(0)
+    STRINGREFS[5][0]["values"] = MAP_NAMES[level] if level in MAP_NAMES else ["wld" if level == "WLD" else ""]
+    if STRINGREFS[5][0].current() == -1: STRINGREFS[5][0].current(0)
 def on_map_changed(index, value, op):
     global STRINGREFS
     current_room = STRINGREFS[5][1].get()
     if current_room in ENTRANCE_NAMES:
         STRINGREFS[6][0]["values"] = ENTRANCE_NAMES[current_room]
-    elif current_room == "wld":
-        STRINGREFS[6][0]["values"] = [""]
+    #elif current_room != "wld":
+    #    STRINGREFS[6][0]["values"] = ["ERROR"]
     else:
-        STRINGREFS[6][0]["values"] = ["ERROR"]
+        STRINGREFS[6][0]["values"] = [""]
     STRINGREFS[6][0].current(0)
 
+def load_strings():
+    for i, ref in enumerate(STRINGREFS):
+        STRINGREFS[i][0]['state'] = 'normal'
+        s = read_string(i)
+        if i < 4:
+            s = s.upper()
+        STRINGREFS[i][0].set(s)
+    if STRINGREFS[5][0].get() == "wld":
+        STRINGREFS[4][0].set("WLD")
+        STRINGREFS[6][0].set("") # clear level enter function name on world
+    else:
+        STRINGREFS[4][0].set(STRINGREFS[3][0].get())
+def save_strings():
+    for i, ref in enumerate(STRINGREFS):
+        write_string(i, STRINGREFS[i][0].get())
+    # player saved on world map insted of in level
+    write_bool(0x0144, 0, STRINGREFS[5][0].get() == "wld")
+INIT_CALLBACKS.append(load_strings)
+CHANGE_CALLBACKS.append(save_strings)
+
+# TODO: decouple from STRING_OFFSETS
 def read_string(index: int) -> str:
     global STRING_OFFSETS, DATA
     offset = STRING_OFFSETS[index][1]
@@ -588,323 +695,176 @@ def write_string(index: int, string: str):
 
 category_tab("INVENTORY")
 
-category(7+3, 16, "Params", 5)
-property_sint(offset=0x0d20, bytes=4, name="Current Sticker Page", min=0, max=17, padding=1)
-property_sint(offset=0x0d24, bytes=4, name="Sticker Page Count", min=0, max=18, padding=1)
-property_sint(offset=0x0d28, bytes=4, name="Current Scrap Page", min=0, max=8, padding=1)
-property_sint(offset=0x0e58, bytes=4, name="Thing count", min=0, max=64, padding=1, tooltip="ammount of things in the thing pages. Empty values cause issues.")
+inventory_tree_columns = ("sticker", "unknown", "x", "y")
+inventory_tree_frame = tk.Frame(CURRENT_TAB_ROOT)
+inventory_tree = ttk.Treeview(inventory_tree_frame, columns=inventory_tree_columns)#, height=26)
+inventory_tree.heading("#0", text="page")
+inventory_tree.column("#0", width=96, stretch=False)
+inventory_tree.heading("sticker", text="sticker")
+inventory_tree.heading("unknown", text="unknown")
+inventory_tree.column("unknown", width=64, stretch=False)
+inventory_tree.heading("x", text="x")
+inventory_tree.column("x", width=64, stretch=False)
+inventory_tree.heading("y", text="y")
+inventory_tree.column("y", width=64, stretch=False)
 
-PAGE_SAVE_CALLBACKS: list = []
-PAGE_LOAD_CALLBACKS: list = []
-current_page: tk.StringVar = tk.StringVar()
-current_page_int: int = -1
-page_dropdown = ttk.Combobox(CURRENT_TAB_ROOT, textvariable=current_page, width=15, height=20)
-page_dropdown.grid(row=0, column=7)
-page_dropdown["values"] = ITEM_PAGES
-page_dropdown["state"] = "disabled"
+inventory_tree_v_scrollbar = ttk.Scrollbar(inventory_tree_frame, orient=tk.VERTICAL, command=inventory_tree.yview)
+inventory_tree.configure(yscrollcommand=inventory_tree_v_scrollbar.set)
 
-def page_init():
-    global current_page_int
-    page_dropdown["state"] = "normal"
-    current_page_int = -1
-    page_dropdown.current(1)
-    current_page_int = -1
-    page_dropdown.current(0)
-INIT_CALLBACKS.append(page_init)
-def page_changed(a=None,b=None,c=None):
-    global current_page_int
-    for callback in PAGE_SAVE_CALLBACKS:
-        callback()
-    current_page_int = page_dropdown.current()
-    for callback in PAGE_LOAD_CALLBACKS:
-        callback()
-CHANGE_CALLBACKS.append(page_changed)
+inventory_tree.pack(side="left", fill="both", expand=True)
+inventory_tree_v_scrollbar.pack(side="right", fill="y")
+inventory_tree_frame.pack(fill="both",expand=True)
 
-current_page.trace_add("write", page_changed)
+ITEM_NAMES_INCLUDING_EMPTY = ["[EMPTY]"]
+ITEM_NAMES_INCLUDING_EMPTY.extend(ITEM_NAMES)
+STICKER_NAMES_INCLUDING_EMPTY = ["[EMPTY]"]
+STICKER_NAMES_INCLUDING_EMPTY.extend([n for n in ITEM_NAMES if not CHECK_LIMITS or n.startswith("PK_") or n.startswith("SL_")])
+THING_NAMES_INCLUDING_EMPTY = ["[EMPTY]"]
+THING_NAMES_INCLUDING_EMPTY.extend([n for n in ITEM_NAMES if not CHECK_LIMITS or n.startswith("REAL_")])
 
-def register_item_page_entry(root, row: int, item_index: int):
-    selected_item = tk.StringVar(value="[EMPTY]")
-    unknown_var = tk.StringVar(value="0")
-    x_var = tk.StringVar(value="0")
-    y_var = tk.StringVar(value="0")
-    item_select = ttk.Combobox(root, textvariable=selected_item, height=32, width=32)
-    options = ["[EMPTY]"]
-    options.extend([v for v in ITEM_NAMES if v.startswith("SL_") or v.startswith("PK_")])
-    item_select["values"] = options
-    item_select.grid(row=row, column=7, sticky="w")
-    unknown_select = ttk.Spinbox(root, textvariable=unknown_var, from_=0, to=65535, width=6)
-    unknown_select.grid(row=row, column=9, sticky="w")
-    x_select = ttk.Spinbox(root, textvariable=x_var, width=6, from_=-32768, to=32767)
-    x_select.grid(row=row, column=11, sticky="w")
-    y_select = ttk.Spinbox(root, textvariable=y_var, width=6, from_=-32768, to=32767)
-    y_select.grid(row=row, column=13, sticky="w")
-    ttk.Label(root, justify="right", text=" item").grid(row=row, column=6, sticky="e")
-    ttk.Label(root, justify="right", text=" unknown").grid(row=row, column=8, sticky="e")
-    ttk.Label(root, justify="right", text=" x").grid(row=row, column=10, sticky="e")
-    ttk.Label(root, justify="right", text=" y").grid(row=row, column=12, sticky="e")
+INVENTORY_CLEANUP_FN = None
+def inventory_tree_edit_cell(event):
+    global INVENTORY_CLEANUP_FN
+    item = inventory_tree.identify_row(event.y)
+    column = inventory_tree.identify_column(event.x)
+    if not item or not column:
+        return
+    elif column == "#0": 
+        # only allow to edit value columns, not the main column
+        return
+    index = int(column[1:]) - 1
+    x, y, width, height = inventory_tree.bbox(item, column)
 
-    def load():
-        if current_page_int == -1: return
-        offset = ITEM_PAGE_BASE_OFFSET + ITEM_PAGE_SIZE * current_page_int + item_index * 10
-        item = read_uint(offset, 2)
-        unknown = read_uint(offset + 2, 2)
+    if len(inventory_tree.item(item, "values")) <= index: return
+    value = inventory_tree.item(item, "values")[index]
+    if index == 0:
+        item_names = STICKER_NAMES_INCLUDING_EMPTY
+        if len(inventory_tree.item(item, "values")) == 2:
+            item_names = THING_NAMES_INCLUDING_EMPTY
+        entry = ttk.Combobox(inventory_tree, values=item_names)
+        entry.place(x=x, y=y, width=width, height=height)
+        entry.insert(0, inventory_tree.item(item, "values")[index])
+        entry.select_range(0, "end")
+        #entry["state"] = "readonly"
+        entry.focus()
+    else:
+        int_range = SIGNED_INT_RANGES[2] # if index != 1 else UNSIGNED_INT_RANGES[2]
+        entry = ttk.Spinbox(inventory_tree, increment=1, from_=int_range[0], to=int_range[1])
+        entry.place(x=x, y=y, width=width, height=height)
+        entry.insert(0, inventory_tree.item(item, "values")[index])
+        entry.select_range(0, "end")
+        entry.focus()
+
+    def save(event=None):
+        global INVENTORY_CLEANUP_FN
+        INVENTORY_CLEANUP_FN = None
+        values = list(inventory_tree.item(item, "values"))
+        values[index] = entry.get()
+        inventory_tree.item(item, values=values)
+        inventory_tree.focus()
+        entry.destroy()
+
+    entry.bind("<Return>", save)
+    if index != 0: entry.bind("<FocusOut>" if index != 0 else "<<ComboboxSelected>>", save)
+    entry.bind("<Escape>", lambda e: entry.destroy())
+    INVENTORY_CLEANUP_FN = save
+
+inventory_tree.bind("<1>", lambda e: INVENTORY_CLEANUP_FN() if INVENTORY_CLEANUP_FN else None)
+inventory_tree.bind("<Double-1>", inventory_tree_edit_cell)
+
+inventory_items = {}
+inventory_things = {}
+
+def inventory_load():
+    for offset in inventory_items:
+        item = inventory_items[offset]
+        item_id = read_int(offset + 0, 2)
+        unknown = read_int(offset + 2, 2)
         item_type = read_uint(offset + 4, 2)
-        x = read_int(offset + 6, 2)
-        y = read_int(offset + 8, 2)
+        item_pos_x = read_int(offset + 6, 2)
+        item_pos_y = read_int(offset + 8, 2)
 
-        if item_type == 16383:
-            item = -1
-        selected_item.set(ITEM_NAMES[item] if 0 <= item < len(ITEM_NAMES) else "[EMPTY]")
-        unknown_var.set(str(unknown))
-        x_var.set(str(x))
-        y_var.set(str(y))
-    def save():
-        if current_page_int == -1: return
-        offset = ITEM_PAGE_BASE_OFFSET + ITEM_PAGE_SIZE * current_page_int + item_index * 10
-        item_name = item_select.get()
-        item = ITEM_INDEX_LOOKUP[item_name] if item_name in ITEM_INDEX_LOOKUP else -1
-        unknown = int(unknown_var.get()) if unknown_var.get().isascii() and unknown_var.get().isnumeric() else 0
-        x = int(x_var.get()) if x_var.get().isascii() and x_var.get().isnumeric() else 0
-        y = int(y_var.get()) if y_var.get().isascii() and y_var.get().isnumeric() else 0
+        item_name = "[EMPTY]"
+        if item_type != 16383:
+            item_name = ITEM_NAMES[item_id]
 
-        item_type = 0
-        if item < 0: # invalid or empty
-            item_type = 16383
-        else:
-            item_type = TEMP_ITEM_TYPES[ITEM_TYPES[ITEM_NAMES[item]]]
+        inventory_tree.item(item, values=(item_name, str(unknown), str(item_pos_x), str(item_pos_y)))
+    for offset in inventory_things:
+        item = inventory_things[offset]
+        item_id = read_int(offset + 0, 2)
+        unknown = read_int(offset + 2, 2)
 
-        write_uint(offset, item, 2)
-        write_uint(offset+2, unknown, 2)
-        write_uint(offset+4, item_type, 2)
-        write_int(offset+6, x, 2)
-        write_int(offset+8, y, 2)
+        item_name = "[EMPTY]"
+        if 0 < item_id < len(ITEM_NAMES):
+            item_name = ITEM_NAMES[item_id]
 
-    def init():
-        nonlocal x_select, y_select, unknown_select, item_select
-        x_select["state"] = "normal"
-        y_select["state"] = "normal"
-        unknown_select["state"] = "normal"
-        item_select["state"] = "normal"
-    x_select["state"] = "disabled"
-    y_select["state"] = "disabled"
-    unknown_select["state"] = "disabled"
-    item_select["state"] = "disabled"
+        inventory_tree.item(item, values=(item_name, str(unknown)))
 
-    PAGE_SAVE_CALLBACKS.append(save)
-    PAGE_LOAD_CALLBACKS.append(load)
-    INIT_CALLBACKS.append(init)
+def inventory_save():
+    for offset in inventory_items:
+        item = inventory_items[offset]
+        values = inventory_tree.item(item, "values")
+        item_name, unknown, item_pos_x, item_pos_y = values
+        if unknown.removeprefix("-").isnumeric() and unknown.removeprefix("-").isascii():
+            unknown = int(unknown)
+        else: 
+            continue
+        if item_pos_x.removeprefix("-").isnumeric() and item_pos_x.removeprefix("-").isascii():
+            item_pos_x = int(item_pos_x)
+        else: 
+            continue
+        if item_pos_y.removeprefix("-").isnumeric() and item_pos_y.removeprefix("-").isascii():
+            item_pos_y = int(item_pos_y)
+        else: 
+            continue
+        
+        # invalid item names equal to empty slots
+        item_type = (65534 if ITEM_TYPES[item_name] == 3 else 0) if item_name in ITEM_TYPES else 16383
+        item_id = ITEM_INDEX_LOOKUP[item_name] if item_name != "[EMPTY]" and item_name in ITEM_INDEX_LOOKUP else 0
 
-for i in range(15):
-    register_item_page_entry(CURRENT_TAB_ROOT, 1+i, i)
+        write_int(offset + 0, item_id, 2)
+        write_int(offset + 2, unknown, 2)
+        write_uint(offset + 4, item_type, 2)
+        write_int(offset + 6, item_pos_x, 2)
+        write_int(offset + 8, item_pos_y, 2)
+    for offset in inventory_things:
+        item = inventory_things[offset]
+        values = inventory_tree.item(item, "values")
+        item_name, unknown = values
+        if unknown.removeprefix("-").isnumeric() and unknown.removeprefix("-").isascii():
+            unknown = int(unknown)
+        else: 
+            continue
+        item_id = ITEM_INDEX_LOOKUP[item_name] if item_name != "[EMPTY]" and item_name in ITEM_INDEX_LOOKUP else 0
+        write_int(offset + 0, item_id, 2)
+        write_int(offset + 2, unknown, 2)
 
-THING_PAGE_SAVE_CALLBACKS: list = []
-THING_PAGE_LOAD_CALLBACKS: list = []
-current_thing_page: tk.StringVar = tk.StringVar()
-current_thing_page_int: int = -1
-thing_page_dropdown = ttk.Combobox(CURRENT_TAB_ROOT, textvariable=current_thing_page, width=15, height=20)
-thing_page_dropdown.grid(row=16, column=7)
-thing_page_dropdown["values"] = [f"ThingPage{i+1}" for i in range(13)]
-thing_page_dropdown["state"] = "disabled"
-ttk.Label(CURRENT_TAB_ROOT, text="Things:").grid(row=16, column=6)
+INIT_CALLBACKS.append(inventory_load)
+CHANGE_CALLBACKS.append(inventory_save)
 
-def thing_page_init():
-    global current_thing_page_int
-    thing_page_dropdown["state"] = "normal"
-    current_thing_page_int = -1
-    thing_page_dropdown.current(1)
-    current_thing_page_int = -1
-    thing_page_dropdown.current(0)
-INIT_CALLBACKS.append(thing_page_init)
-def thing_page_changed(a=None,b=None,c=None):
-    global current_thing_page_int
-    for callback in THING_PAGE_SAVE_CALLBACKS:
-        callback()
-    current_thing_page_int = thing_page_dropdown.current()
-    for callback in THING_PAGE_LOAD_CALLBACKS:
-        callback()
-CHANGE_CALLBACKS.append(thing_page_changed)
+def register_item_page(name: str, offset: int):
+    subtreeroot = inventory_tree.insert("", "end", text=name)
+    for i in range(ITEM_PAGE_ITEM_COUNT):
+        item_offset = offset + i * 10
+        flag_item = inventory_tree.insert(subtreeroot, "end", text="", values=("[EMPTY]", "0", "0", "0"))
+        inventory_items[item_offset] = flag_item
 
-current_thing_page.trace_add("write", thing_page_changed)
+for i, page in enumerate(ITEM_PAGES): 
+    register_item_page(page, ITEM_PAGE_BASE_OFFSET + i * ITEM_PAGE_SIZE)
 
-THING_BASE_OFFSET = 0x0d58
+temp_thing_page = None
+for i in range(THING_TOTAL_COUNT):
+    if i % 5 == 0: # 5 things per page
+        temp_thing_page = inventory_tree.insert("", "end", text=f"ThingPage{i//5+1}")
+    thing_offset = THING_BASE_OFFSET + i * 4
+    thing_item = inventory_tree.insert(temp_thing_page, "end", text="", values=("[EMPTY]", "0"))
+    inventory_things[thing_offset] = thing_item
 
-def register_thing_page_entry(root, row: int, index: int):
-    selected_item = tk.StringVar(value="[EMPTY]")
-    unknown_var = tk.StringVar(value="0")
-    item_select = ttk.Combobox(root, textvariable=selected_item, height=32, width=32)
-    options = ["[EMPTY]"]
-    options.extend([v for v in ITEM_NAMES if v.startswith("REAL_")])
-    item_select["values"] = options
-    item_select.grid(row=row, column=7)
-    unknown_select = ttk.Spinbox(root, textvariable=unknown_var, from_=0, to=65535, width=6)
-    unknown_select.grid(row=row, column=9)
-    ttk.Label(root, text="thing").grid(row=row, column=6)
-    ttk.Label(root, text="unknown").grid(row=row, column=8)
+# TODO: move inventory parameters back to this page
 
-    def save():
-        if current_thing_page_int == -1: return
-        if current_thing_page_int == 12 and index == 4: return # do not overwrite thing count
-        offset = THING_BASE_OFFSET + (5*4) * current_thing_page_int + index * 4
-        item_name = item_select.get()
-        item = ITEM_INDEX_LOOKUP[item_name] if item_name in ITEM_INDEX_LOOKUP else -1
-        unknown = int(unknown_var.get()) if unknown_var.get().isascii() and unknown_var.get().isnumeric() else 0
-        if item < 0:
-            write_uint(offset, 0, 2)
-            write_uint(offset + 2, 0, 2)
-        else:
-            write_uint(offset, item, 2)
-            write_uint(offset + 2, unknown, 2)
-
-    def load():
-        nonlocal init
-        if current_thing_page_int == -1: return
-        if current_thing_page_int == 12 and index == 4:
-            unknown_select["state"] = "disabled"
-            item_select["state"] = "disabled"
-        else:
-            init()
-        offset = THING_BASE_OFFSET + (5*4) * current_thing_page_int + index * 4
-        item = read_uint(offset, 2)
-        unknown = read_uint(offset + 2, 2)
-        selected_item.set(ITEM_NAMES[item] if 0 < item < len(ITEM_NAMES) else "[EMPTY]")
-        unknown_var.set(str(unknown))
-
-
-    def init():
-        nonlocal unknown_select, item_select
-        if current_thing_page_int == 12 and index == 4: return # do not overwrite thing count
-        unknown_select["state"] = "normal"
-        item_select["state"] = "normal"
-    unknown_select["state"] = "disabled"
-    item_select["state"] = "disabled"
-
-    THING_PAGE_SAVE_CALLBACKS.append(save)
-    THING_PAGE_LOAD_CALLBACKS.append(load)
-    INIT_CALLBACKS.append(init)
-
-for i in range(5):
-    register_thing_page_entry(CURRENT_TAB_ROOT, 17+i, i)
-
-ttk.Label(CURRENT_TAB_ROOT, text="WARNING: The thing count needs to be adjusted manually at the moment.").grid(row=22, column=6, columnspan=8)
-ttk.Label(CURRENT_TAB_ROOT, text="Leaving gaps in the thing list will crash the game if the gap is selected.").grid(row=23, column=6, columnspan=8)
-ttk.Label(CURRENT_TAB_ROOT, text="Raising the sticker page count above 8 will make the sticker pages overflow into the scrap pages").grid(row=24, column=6, columnspan=8)
-
-def register_switch_editor(root, name: str, switches: dict[str, int], row: int, tooltip: None|str = None):
-    # required variables
-    last_switch_name = ""
-    last_switch_index = -1
-    switch_names = [k for k in switches]
-    selected_switch = tk.StringVar()
-    switch_value_ref = tk.StringVar()
-    switch_dropdown = ttk.Combobox(root, textvariable=selected_switch, width=DROPDOWN_WIDTHS, height=32)
-    if TOOLTIPS_ENABLED and tooltip is not None:
-        Hovertip(switch_dropdown, tooltip)
-    switch_value: ttk.Spinbox = ttk.Spinbox(root, from_=0, to=255, increment=1, textvariable=switch_value_ref, width=4)
-    label: ttk.Label = ttk.Label(root, text=name)
-
-    def switch_changed(a=None, b=None, c=None, d=None, e=None):
-        nonlocal last_switch_name, switch_value, switch_dropdown, selected_switch, last_switch_index
-        switch_index = switch_dropdown.current()
-        # uninitialized
-        if switch_index == -1: 
-            return
-        current_value = switch_value.get()
-        if last_switch_name != "" and last_switch_name in switches:
-            try:
-                # this does not catch everything but it does catch a lot
-                if current_value.isnumeric():
-                    write_uint(switches[last_switch_name], int(current_value), 1)
-            except e:
-                print("an error occurred while writing the value")
-                raise
-
-        switch_names[last_switch_index] = f"{last_switch_name}: {current_value}"
-
-        # update value reference
-        last_switch_index = switch_index
-        last_switch_name = selected_switch.get().split(":")[0]
-        if last_switch_name in switches:
-            switch_value_ref.set(str(read_uint(switches[last_switch_name], 1)))
-        else:
-            switch_value_ref.set("-1")
-        if selected_switch.get().__contains__(":"):
-            selected_switch.set(last_switch_name)
-        switch_names[last_switch_index] = f"{last_switch_name}"
-        switch_dropdown['values'] = switch_names
-    
-    def init():
-        nonlocal switch_dropdown, switch_value, switch_names
-        switch_dropdown['state'] = 'normal'
-        switch_value['state'] = 'normal'
-        switch_names = [f"{k}: {read_uint(switches[k], 1)}" for k in switches.keys()]
-        switch_dropdown['values'] = switch_names
-    
-    CHANGE_CALLBACKS.append(switch_changed)
-    INIT_CALLBACKS.append(init)
-
-    # set up ui elements
-    label.grid(row=row+FLAG_SWITCH_ROW_START, rowspan=1, column=6, columnspan=1)
-    selected_switch.trace_add("write", switch_changed)
-    switch_dropdown['values'] = switch_names
-    switch_dropdown.grid(row=row+FLAG_SWITCH_ROW_START, rowspan=1, column=7, columnspan=2)
-    switch_dropdown['state'] = 'disabled'
-    switch_value.grid(row=row+FLAG_SWITCH_ROW_START, rowspan=1, column=9, columnspan=3)
-    switch_value['state'] = 'disabled'
-
-def register_flag_editor(root, name: str, flags: dict[str, tuple[int, int]], row: int, tooltip: None|str = None):
-    last_flag_name = ""
-    last_flag_index = -1
-    flag_names = [k for k in flags.keys()]
-
-    label: ttk.Label = ttk.Label(root, text=name)
-    selected_flag = tk.StringVar()
-    flag_dropdown = ttk.Combobox(root, textvariable=selected_flag, width=DROPDOWN_WIDTHS, height=32)
-    if TOOLTIPS_ENABLED and tooltip is not None:
-        Hovertip(flag_dropdown, tooltip)
-    flag_value = tk.BooleanVar()
-    flag_button = ttk.Checkbutton(root, text="", variable=flag_value)
-
-    def flag_changed(a=None, b=None, c=None, d=None, e=None):
-        nonlocal last_flag_name, last_flag_index, flag_dropdown
-        flag_index = flag_dropdown.current()
-        if flag_index == -1: 
-            # invalid value
-            return
-        current_value = flag_value.get()
-        if last_flag_name != "" and last_flag_name in flags:
-            write_bool(flags[last_flag_name][0], flags[last_flag_name][1], current_value)
-
-        flag_names[last_flag_index] = f"{last_flag_name}: {current_value}" # f"{last_flag_name}:[{current_value}]"
-
-        last_flag_index = flag_index
-        last_flag_name = selected_flag.get().split(":")[0].split("[")[0]
-        if last_flag_name in flags:
-            flag_value.set(read_bool(flags[last_flag_name][0], flags[last_flag_name][1]))
-        if selected_flag.get().__contains__(":"):
-            selected_flag.set(last_flag_name)
-
-        flag_names[last_flag_index] = f"{last_flag_name}"
-        flag_dropdown['values'] = flag_names
-
-    def init():
-        nonlocal flag_dropdown, flag_button, flag_names
-        flag_dropdown['state'] = 'normal'
-        flag_button['state'] = 'normal'
-        #flag_names = [f"{k}:[{read_bool(flags[k][0], flags[k][1])}]" for k in flags.keys()]
-        flag_names = [f"{k}: {read_bool(flags[k][0], flags[k][1])}" for k in flags.keys()]
-        flag_dropdown['values'] = flag_names
-    
-    CHANGE_CALLBACKS.append(flag_changed)
-    INIT_CALLBACKS.append(init)
-
-    # init ui elements
-    label.grid(row=row+FLAG_SWITCH_ROW_START, rowspan=1, column=6, columnspan=1)
-    selected_flag.trace_add("write", flag_changed)
-    flag_dropdown['values'] = flag_names
-    flag_dropdown.grid(row=row+FLAG_SWITCH_ROW_START, rowspan=1, column=7, columnspan=2)
-    flag_dropdown['state'] = 'disabled'
-    flag_button.grid(row=row+FLAG_SWITCH_ROW_START, rowspan=1, column=9, columnspan=3)
-    flag_button['state'] = 'disabled'
+ttk.Label(CURRENT_TAB_ROOT, text="NOTE: The thing count needs to be adjusted manually on the general page at the moment.").pack()
+ttk.Label(CURRENT_TAB_ROOT, text="Leaving gaps in the thing list will crash the game if the gap is selected.").pack()
+ttk.Label(CURRENT_TAB_ROOT, text="Raising the sticker page count above 8 will make the sticker pages overflow into the scrap pages").pack()
 
 category_tab("GENERAL", 0)
 
@@ -915,6 +875,10 @@ property_uint(offset=0x001c, bytes=1, name="Seconds")
 property_uint(offset=0x001e, bytes=1, name="Minutes")
 property_uint(offset=0x001f, bytes=1, name="Hours")
 
+category(4, 6, "TEMP")
+property_uint(offset=0x0030, bytes=4, name="Reload Count", tooltip="Highest reload count is the default selected save in save selection")
+property_uint(offset=0x0170, bytes=4, name="Escape Chance", tooltip="Percent Chance to escape the next battle.")
+
 category(4, 1, "Mario Stats")
 property_sint(offset=0x014c, bytes=4, name="Health", min=1, max=100)
 property_sint(offset=0x0150, bytes=4, name="Max Health", min=1, max=100)
@@ -923,53 +887,220 @@ property_sint(offset=0x0148, bytes=4, name="Coin count", min=0, max=9999)
 
 category(2, 5, "Abilities")
 property_bool(offset=0x0184, index=0, name="has hammer", tooltip="can use the hammer in the overworld and in battle")
+#property_bool(offset=0x0184, index=1, name="unknown", tooltip="never referenced, always available")
 property_bool(offset=0x0184, index=2, name="has kersti", tooltip="can talk to kersti, paperize and use the battle spinner (if unlocked)")
 
+category(0, 23, "Sticker Album")
+property_sint(offset=0x0d20, bytes=4, name="Current Sticker Page", min=0, max=17)
+property_sint(offset=0x0d24, bytes=4, name="Sticker Page Count", min=0, max=18)
+property_sint(offset=0x0d28, bytes=4, name="Current Scrap Page", min=0, max=8)
+# TODO: calculate this based on the thing list itself
+property_sint(offset=0x0e58, bytes=4, name="Thing count", min=0, max=64, tooltip="ammount of things in the thing pages. Empty values cause issues.")
+
 achievement_list: list[tuple[int, int, str, int, int, str]] = [
-    (0x0e80, 0x0ea4, "comet pieces collected", 0, 38, None),
-    (0x0e84, 0x0ea8, "secret doors used", 0, 35, None),
-    (0x0e88, 0x0eac, "sticker collection progress", 0, 160, None),
-    (0x0e8c, 0x0eb0, "hp plus health", 20, 100, None),
-    (0x0e90, 0x0eb4, "coins spent in shops", 0, 10000, None),
-    (0x0e94, 0x0eb8, "battles with perfect", 0, 500, None),
-    (0x0e98, 0x0ebc, "unknown", None, None, None),
-    (0x0e9c, 0x0ec0, "excellent attack count", 0, 1000, None),
-    (0x0ea0, 0x0ec4, "battle spinner jackpot", 0, 50, None),
+    (0x0e80, "comet pieces collected", 0, 38, None),
+    (0x0e84, "secret doors used", 0, 35, None),
+    (0x0e88, "sticker collection progress", 0, 160, None),
+    (0x0e8c, "hp plus health", 20, 100, None),
+    (0x0e90, "coins spent in shops", 0, 10000, None),
+    (0x0e94, "battles with perfect", 0, 500, None),
+    (0x0e98, "unknown", None, None, None),
+    (0x0e9c, "excellent attack count", 0, 1000, None),
+    (0x0ea0, "battle spinner jackpot", 0, 50, None),
 ]
 category(0, 10, "achievement progress")
-for value_offset, target_offset, name, min, max, tooltip in achievement_list:
+for value_offset, name, min, max, tooltip in achievement_list:
     property_sint(value_offset, 4, name, tooltip, min, max)
 category(2, 10, "progress target", None, 1) # achievement progression target
-for value_offset, target_offset, name, min, max, tooltip in achievement_list:
-    property_sint(target_offset, 4, None, tooltip, min, max)
+for value_offset, name, min, max, tooltip in achievement_list:
+    property_sint(value_offset + 4 * len(achievement_list), 4, None, tooltip, min, max)
+category(3, 10, "progress offset", None, 1) # achievement progression offset
+for value_offset, name, min, max, tooltip in achievement_list:
+    property_sint(value_offset + 8 * len(achievement_list), 4, None, tooltip, min, max)
 
-category(3, 10, "Royal stickers", tooltip="Visual representation of collected royal stickers")
+category(4, 10, "Royal stickers", tooltip="Visual representation of collected royal stickers")
 for i in range(6): property_bool(offset=0x0020, index=i, name=f"SaveMenu{i+1}", thin=True, tooltip="display in save select")
-category(4, 10, "") # (royal stickers in game)
+category(5, 10, "") # (royal stickers in game)
 for i in range(6): property_bool(offset=0x0180, index=i, name=f"OnAlbum{i+1}", thin=True, tooltip="display on album cover")
 
+category(2, 7, None)
+property_sint_enum(0x0168, 4, "Party Member", {
+    "None": -1,
+    "1-4 Toad": 0, # requires gf_evt_mac_kinopio_return_town to be false to show up
+    "1-1 Toad": 1,
+    "Wiggler1": 2,
+    "Wiggler2": 3,
+    "Wiggler3": 4,
+    "Wiggler4": 5,
+}, "current party member")
+
+category(0, 28,"Museum")
+property_sint(0x0e78, 4, "regular donations", "ammount of regular stickers donated to the museum")
+property_sint(0x0e7c, 4, "thing donations", "ammount of thing stickers donated to the museum")
+
+category(4, 17,"Unknown")
+for i, (o,t) in enumerate([
+    (0x0178, "counts up something (highest so far is 96)"),
+    #(0x0194, "somehow relates to party members"), # does not seem to actually do anything when modified
+    (0x0eec, "counts up while playing"),
+]):
+    if i == 2: category(4, 22, None) # extremely scuffed layout fix
+    property_sint(o, 4, f"0x{o:04x}", t)
+
+category(2, 23,"Battle Statistic (current level only)")
+property_sint(0x0e68, 4, "battles won", "ammount of battles won within the current level")
+# TODO: confirm
+property_sint(0x0e6c, 4, "enemies defeated?", "ammount of enemies defeated within the current level")
+property_sint(0x0e70, 4, "level end coin bonus", "ammount of bonus coins rewarded on level exit", min=0, max=300)
+
+category(2, 27, "ingame Playtime")
+property_uint(offset=0x0ef0, bytes=2, name="Frames", min=0, max=1799)
+property_uint(offset=0x0ef2, bytes=1, name="Minutes")
+property_uint(offset=0x0ef3, bytes=1, name="Hours")
 
 category_tab("FLAGS/SWITCHES")
-FLAG_SWITCH_ROW_START = 0
-register_flag_editor(CURRENT_TAB_ROOT, "Global Flags", FLAG_OFFSETS, 1, tooltip="story progression booleans")
-register_switch_editor(CURRENT_TAB_ROOT, "Global Switches", SWITCH_OFFSETS, 2, tooltip="story progression integers")
-register_flag_editor(CURRENT_TAB_ROOT, "Global mapobject Flags", MOBJ_FLAG_OFFSETS, 3, tooltip="map object interactions")
-register_switch_editor(CURRENT_TAB_ROOT, "Global mapobject Switches", MOBJ_SWITCH_OFFSETS, 4, tooltip="map object interactions")
-register_flag_editor(CURRENT_TAB_ROOT, "Global item flags", ITEM_FLAG_OFFSETS, 5, "picked up stickers")
-register_flag_editor(CURRENT_TAB_ROOT, "Temporary (a) Flags", AF_OFFSETS, 6, "reset when mario exits to the world map")
-register_switch_editor(CURRENT_TAB_ROOT, "Temporary (a) Switches", AS_OFFSETS, 7, "reset when mario exits to the world map")
-register_flag_editor(CURRENT_TAB_ROOT, "Temporary (a) mapobject Flags", A_MOBJ_FLAG_OFFSETS, 8, "reset when mario exits to the world map")
-register_switch_editor(CURRENT_TAB_ROOT, "Temporary (a) mapobject Switches", A_MOBJ_SWITCH_OFFSETS, 9, "reset when mario exits to the world map")
-register_flag_editor(CURRENT_TAB_ROOT, "Temporary (a) item flags", A_ITEM_FLAG_OFFSETS, 10, "reset when mario exits to the world map")
-# not sure whether those are flags or switches
-register_flag_editor(CURRENT_TAB_ROOT, "Global Itemlist flags", ITEM2_FLAG_OFFSETS, 11, "unknown purpose, tracks when mario peels of some stickers or hits some blocks")
-register_switch_editor(CURRENT_TAB_ROOT, "Temporary (a) itemlist switches", A_ITEM2_SWITCH_OFFSETS, 12, "most likely used to track how often mario has already hit a block")
-#ttk.Label(CURRENT_TAB_ROOT, text="").grid(row=FLAG_SWITCH_ROW_START+13, column=6, columnspan=2)
-#register_switch_editor(CURRENT_TAB_ROOT, "ilist_s", ITEM2_SWITCH_OFFSETS, 13) # NOTE: these are empty
-#register_flag_editor(CURRENT_TAB_ROOT, "ilist_af", A_ITEM2_FLAG_OFFSETS, 14) # NOTE: these are empty
-save_flag_description = scrolledtext.ScrolledText(CURRENT_TAB_ROOT)
-save_flag_description.grid(row=14, column=0, columnspan=16, sticky="ew")
+flag_switch_frame = tk.Frame(CURRENT_TAB_ROOT)
+flag_switch_tree = ttk.Treeview(flag_switch_frame, columns=("key","value"))#, height=26)
+flag_switch_tree.heading("#0", text="category")
+flag_switch_tree.column("#0", width=168, stretch=False)
+flag_switch_tree.heading("key", text="key")
+flag_switch_tree.heading("value", text="value")
+flag_switch_tree.column("value", width=64, stretch=False)
+
+flag_switch_tree_v_scrollbar = ttk.Scrollbar(flag_switch_frame, orient=tk.VERTICAL, command=flag_switch_tree.yview)
+flag_switch_tree.configure(yscrollcommand=flag_switch_tree_v_scrollbar.set)
+
+flag_switch_tree.pack(side="left", fill="both", expand=True)
+flag_switch_tree_v_scrollbar.pack(side="right", fill="y")
+flag_switch_frame.pack(fill="both",expand=True)
+
+def flag_switch_tree_edit_cell(event):
+    is_keypress = event.type == "2"
+    item = flag_switch_tree.selection()[0] if is_keypress else flag_switch_tree.identify_row(event.y)
+    column = "#2" if is_keypress else flag_switch_tree.identify_column(event.x)
+    if not item or not column:
+        return
+    elif column != "#2": 
+        # only allow to edit values, not the other columns
+        return
+    index = int(column[1:]) - 1
+    x, y, width, height = flag_switch_tree.bbox(item, column)
+
+    if len(flag_switch_tree.item(item, "values")) < 2: return
+
+    value = flag_switch_tree.item(item, "values")[index]
+    if value == "True" or value == "False":
+        values = list(flag_switch_tree.item(item, "values"))
+        istrue = str(value == "False")
+        for i in flag_items[item]:
+            values = list(flag_switch_tree.item(i, "values"))
+            values[index] = istrue
+            flag_switch_tree.item(i, values=values)
+        return
+    else:
+        entry = ttk.Spinbox(flag_switch_tree, increment=1, from_=0, to=255)
+        entry.place(x=x, y=y, width=width, height=height)
+        entry.insert(0, flag_switch_tree.item(item, "values")[index])
+        entry.select_range(0, "end")
+        entry.focus()
+
+    def save(event=None):
+        for i in switch_items[item]:
+            values = list(flag_switch_tree.item(i, "values"))
+            values[index] = entry.get()
+            flag_switch_tree.item(i, values=values)
+        entry.destroy()
+
+    entry.bind("<Return>", save)
+    entry.bind("<FocusOut>", save)
+    entry.bind("<Escape>", lambda e: entry.destroy())
+
+flag_switch_tree.bind("<Double-1>", flag_switch_tree_edit_cell)
+flag_switch_tree.bind("<space>", flag_switch_tree_edit_cell)
+flag_switch_tree.bind("<Return>", flag_switch_tree_edit_cell)
+
+switch_list: dict[int, list[str]] = {}
+switch_items: dict[str, list[str]] = {}
+def register_switches(name: str, switches: dict[str, int]):
+    subtreeroot = flag_switch_tree.insert("", "end", text=name)
+    for switch_name in switches:
+        switch_offset = switches[switch_name]
+        switch_item = flag_switch_tree.insert(subtreeroot, "end", text="", values=(switch_name, f"{read_uint(switch_offset, 1)}"))
+        if switch_offset not in switch_list: switch_list[switch_offset] = []
+        switch_list[switch_offset].append(switch_item)
+        switch_items[switch_item] = switch_list[switch_offset]
+
+def load_switches():
+    for offset in switch_list:
+        items = switch_list[offset]
+        for item in items:
+            values = list(flag_switch_tree.item(item, "values"))
+            values[1] = read_uint(offset, 1)
+            flag_switch_tree.item(item, values=values)
+def save_switches():
+    for offset in switch_list:
+        items = switch_list[offset]
+        for item in items:
+            values = flag_switch_tree.item(item, "values")
+            value = values[1]
+            if value.isnumeric() and value.isascii():
+                write_uint(offset, int(value), 1)
+            break # there should only be the need to write one switch
+INIT_CALLBACKS.append(load_switches)
+CHANGE_CALLBACKS.append(save_switches)
+
+flag_list: dict[tuple[int, int], list[str]] = {}
+flag_items: dict[str, list[str]] = {}
+def register_flags(name: str, flags: dict[str, tuple[int, int]]):
+    subtreeroot = flag_switch_tree.insert("", "end", text=name)
+    for flag_name in flags:
+        flag_offset, flag_suboffset = flags[flag_name]
+        flag_item = flag_switch_tree.insert(subtreeroot, "end", text="", values=(flag_name, f"{read_bool(flag_offset, flag_suboffset)}"))
+        if (flag_offset, flag_suboffset) not in flag_list: flag_list[(flag_offset, flag_suboffset)] = []
+        flag_list[(flag_offset, flag_suboffset)].append(flag_item)
+        flag_items[flag_item] = flag_list[(flag_offset, flag_suboffset)]
+    
+def load_flags():
+    for offset, suboffset in flag_list:
+        items = flag_list[(offset, suboffset)]
+        for item in items:
+            values = list(flag_switch_tree.item(item, "values"))
+            values[1] = read_bool(offset, suboffset)
+            flag_switch_tree.item(item, values=values)
+def save_flags():
+    for offset, suboffset in flag_list:
+        items = flag_list[(offset, suboffset)]
+        for item in items:
+            values = flag_switch_tree.item(item, "values")
+            value = values[1]
+            write_bool(offset, suboffset, value == "True")
+            break # all flag values for the same offset are identical so only write the first
+INIT_CALLBACKS.append(load_flags)
+CHANGE_CALLBACKS.append(save_flags)
+
+register_flags("Global Flags", FLAG_OFFSETS)# , 1, tooltip="story progression booleans")
+register_switches("Global Switches", SWITCH_OFFSETS)# , 2, tooltip="story progression integers")
+register_flags("Global mapobject Flags", MOBJ_FLAG_OFFSETS)# , 3, tooltip="map object interactions")
+register_switches("Global mapobject Switches", MOBJ_SWITCH_OFFSETS)# , 4, tooltip="map object interactions")
+register_flags("Global item flags", ITEM_FLAG_OFFSETS)# , 5, "picked up stickers")
+register_flags("Area Flags", AF_OFFSETS)# , 6, "reset when mario exits to the world map")
+register_switches("Area Switches", AS_OFFSETS)# , 7, "reset when mario exits to the world map")
+register_flags("Area mapobject Flags", A_MOBJ_FLAG_OFFSETS)# , 8, "reset when mario exits to the world map")
+register_switches("Area mapobject Switches", A_MOBJ_SWITCH_OFFSETS)# , 9, "reset when mario exits to the world map")
+register_flags("Area item flags", A_ITEM_FLAG_OFFSETS)# , 10, "reset when mario exits to the world map")
+# not sure whether those actually are flags or switches but I'm pretty certain
+register_flags("Global Itemlist flags", ITEM2_FLAG_OFFSETS)# , 11, "unknown purpose, tracks when mario peels of some stickers or hits some blocks")
+register_switches("Area itemlist switches", A_ITEM2_SWITCH_OFFSETS)# , 12, "most likely used to track how often mario has already hit a block")
+
+# theoretically not flags directly but they behave exactly the same as flags
+register_flags("Unlocked things", THING_UNLOCK_ORDER)
+
+save_flag_description = scrolledtext.ScrolledText(CURRENT_TAB_ROOT, wrap="word", height=12)
+save_flag_description.pack(fill="both")
 save_flag_description.insert("end", """NOTE: Some switches may be 16 or 32 bits in size. These are not properly implemented yet.
+
+Area Switches and Flags are reset when mario returns to the world map.
+The Area Switches and Flags also overlap in the save file so editing one may change another aswell.
 
 Known Flags
 ===========
@@ -982,28 +1113,28 @@ gf_wm_hana_[A] - show wiggler piece icon at level A
 
 Abilities
 ---------
-gf_tutorial_pepalyze          - unlock paperize ability
-gf_tutorial_first_roulette_00 - unlock battle spinner
-gf_pouch_get_sealbook         - unlock sticker album
-gf_pouch_get_mappiece         - unlock album scrap section
-gf_pouch_get_monoart          - unlock album thing section
+gf_tutorial_pepalyze           - unlock paperize ability
+gf_tutorial_first_roulette_00  - unlock battle spinner
+gf_pouch_get_sealbook          - unlock sticker album
+gf_pouch_get_mappiece          - unlock album scrap section
+gf_pouch_get_monoart           - unlock album thing section
+gf_evt_mac_battle_tutorial_end - if false and the player saved in a level, mario will continue in the level
 
 Other
 -----
 gf_museum_[A]_seal_[B] - donated sticker type A (robj/btl) number B to the museum
 gf_*_talk_* - has heared specific dialog and can skip it
-every paperization has a flag which marks whether it has been completed yet
+Every paperization has a flag which marks whether it has been completed yet. Sadly these do not follow a unified naming scheme.
 
-Other Dropdowns
-===============
-Global switches are similar to global flags but they store an 8-bit number instead.
-Global mapobject Flags are like Global Flags but tied to a specific object in the world.
-Global mapobject Switches: like mapobject flags
-Global item flags: Some stickers can only be collected once. This tracks their collection
+Other
+=====
+- Global switches are similar to global flags but they store an 8-bit number instead.
+- Global mapobject Flags are like Global Flags but tied to a specific object in the world.
+- Global mapobject Switches: like mapobject flags
+- Global item flags: Some stickers can only be collected once. This tracks their collection
+- Collected Things: Not a flag array but it still is an array of booleans.
 
-
-The temporary sections are like the global sections but are cleared every time mario 
-returns to the world map. 
+The 'Area' sections are like the global sections but are cleared every time mario returns to the world map. 
 Those the flags and switches referenced in the asSwitchTable and afSwitchTable.
 """)
 save_flag_description["state"] = "disabled"
@@ -1015,7 +1146,7 @@ for i, (vtype, offset, name, maxlength, tooltip) in enumerate(STRING_OFFSETS):
     string_label = ttk.Label(CURRENT_TAB_ROOT, text=name)
     string_label.grid(row=i+CURRENT_ROW, column=0)
     current_string = tk.StringVar()
-    string_dropdown = ttk.Combobox(CURRENT_TAB_ROOT, textvariable=current_string, width=32)
+    string_dropdown = ttk.Combobox(CURRENT_TAB_ROOT, textvariable=current_string, width=32, height=48)
     if TOOLTIPS_ENABLED:
         Hovertip(string_dropdown, tooltip)
     string_dropdown.grid(row=i+CURRENT_ROW, column=1, columnspan=2)
@@ -1029,10 +1160,8 @@ for i, (vtype, offset, name, maxlength, tooltip) in enumerate(STRING_OFFSETS):
         mapname = STRINGREFS[4][1].get()
         if mapname in MAP_NAMES:
             string_dropdown["values"] = MAP_NAMES[mapname]
-        #elif mapname != "WLD":
-        #    string_dropdown["values"] = ["ERROR"]
         else:
-            string_dropdown["values"] = ["wld"]
+            string_dropdown["values"] = [""]
     elif vtype == STRING_TYPE_ENTRANCE_REF:
         current_room = STRINGREFS[5][1].get()
         if current_room in ENTRANCE_NAMES:
@@ -1049,19 +1178,324 @@ for i, (vtype, offset, name, maxlength, tooltip) in enumerate(STRING_OFFSETS):
 STRINGREFS[4][1].trace_add("write", on_level_changed)
 STRINGREFS[5][1].trace_add("write", on_map_changed)
 
-# experimental (does not work)
+category_tab("PAPERIZE")
+ttk.Label(CURRENT_TAB_ROOT, text="This category specifically is based on a lot of guesses.").pack()
+ttk.Label(CURRENT_TAB_ROOT, text="I have not yet found a situation where any of the data in here is read by the game.").pack()
+
+paperize_edit_enabled = tk.BooleanVar(value=False)
+paperize_edit_enable = ttk.Checkbutton(CURRENT_TAB_ROOT, text="[EXPERIMENTAL] save changes for this section when saving", variable=paperize_edit_enabled).pack()
+ttk.Label(CURRENT_TAB_ROOT, text="This might break since I have not checked it as much as other sections.").pack()
+
+paperize_frame = tk.Frame(CURRENT_TAB_ROOT)
+paperize_tree = ttk.Treeview(paperize_frame, columns=("checked", "type", "item"))#, height=26)
+paperize_tree.heading("#0", text="Name")
+#paperize_tree.column("#0", width=192, stretch=False)
+paperize_tree.heading("checked", text="checked")
+paperize_tree.column("checked", width=64, stretch=False)
+paperize_tree.heading("type", text="unknown")
+paperize_tree.column("type", width=64, stretch=False)
+paperize_tree.heading("item", text="item")
+paperize_tree.column("item", width=192, stretch=False)
+
+paperize_tree_v_scrollbar = ttk.Scrollbar(paperize_frame, orient=tk.VERTICAL, command=paperize_tree.yview)
+paperize_tree.configure(yscrollcommand=paperize_tree_v_scrollbar.set)
+
+paperize_tree.pack(side="left", fill="both", expand=True)
+paperize_tree_v_scrollbar.pack(side="right", fill="y")
+paperize_frame.pack(fill="both",expand=True)
+
+PAPERIZE_CLEANUP_FN = None
+
+def paperize_tree_edit_cell(event):
+    global PAPERIZE_CLEANUP_FN
+    item = paperize_tree.identify_row(event.y)
+    column = paperize_tree.identify_column(event.x)
+    if not item or not column:
+        return
+    index = int(column[1:]) - 1
+    x, y, width, height = paperize_tree.bbox(item, column)
+
+    values = paperize_tree.item(item, "values")
+    if index == -1: return # do not edit labels
+    elif len(values) == 0: return # do not edit headers
+    elif index >= len(values): return # do not edit nonexistant columns
+    #print(column, item, values)
+    # solved
+    if index == 0:
+        values = list(paperize_tree.item(item, "values"))
+        values[0] = values[0] == "False"
+        paperize_tree.item(item, values=values)
+        paperize_tree.focus()
+        return
+    elif index == 1: # type (unknown specifics)
+        int_range = SIGNED_INT_RANGES[2] # if index != 1 else UNSIGNED_INT_RANGES[2]
+        entry = ttk.Spinbox(paperize_tree, increment=1, from_=int_range[0], to=int_range[1])
+        entry.place(x=x, y=y, width=width, height=height)
+        entry.insert(0, paperize_tree.item(item, "values")[index])
+        entry.select_range(0, "end")
+        entry.focus()
+    elif index == 2: # item
+        entry = ttk.Combobox(paperize_tree, values=ITEM_NAMES_INCLUDING_EMPTY, height=32)
+        entry.place(x=x, y=y, width=width, height=height)
+        entry.insert(0, paperize_tree.item(item, "values")[index])
+        entry.select_range(0, "end")
+        entry.focus()
+    else:
+        print("INVALID")
+        return
+
+    def save(event=None):
+        global PAPERIZE_CLEANUP_FN
+        PAPERIZE_CLEANUP_FN = None
+        values = list(paperize_tree.item(item, "values"))
+        values[index] = entry.get()
+        paperize_tree.item(item, values=values)
+        paperize_tree.focus()
+        entry.destroy()
+
+    entry.bind("<Return>", save)
+    entry.bind("<Escape>", lambda e: entry.destroy())
+    PAPERIZE_CLEANUP_FN = save
+
+paperize_tree.bind("<1>", lambda e: PAPERIZE_CLEANUP_FN() if PAPERIZE_CLEANUP_FN else None)
+paperize_tree.bind("<3>", paperize_tree_edit_cell)
+paperize_tree.bind("<Double-1>", paperize_tree_edit_cell)
+
+paperize_tree_nodes = {}
+for name, locknames, ismuseum in (("regular", PAPERIZE_CHECK_NAMES, False), ("museum", PAPERIZE_MUSEUM_CHECK_NAMES, True)):
+    subtreeroot = paperize_tree.insert("", "end", text=name)
+    paperize_tree_nodes[name] = [subtreeroot, []]
+    for i, v in enumerate(locknames):
+        if i == 0: continue # ignore dummy for now
+        paperize_tree_nodes[name][1].append(paperize_tree.insert(subtreeroot, "end", text=v, values=("False", "0","") if not ismuseum else ("False")))
+
+def load_paperize_data():
+    # regular
+    subtreeroot, subtreevalues = paperize_tree_nodes["regular"]
+    for i, subtreevalue in enumerate(subtreevalues):
+        locktype, lockindex, locksolved, lockitem = struct.unpack_from("hhhh", DATA, 0x11f8+(i+1)*8) 
+        item = ITEM_NAMES[lockitem] if 0 <= lockitem < len(ITEM_NAMES) else "[EMPTY]"
+        unknown = str(locktype)
+        solved = str(locksolved == 0)
+        paperize_tree.item(subtreevalue, values=(solved, unknown, item))
+    # museum
+    subtreeroot, subtreevalues = paperize_tree_nodes["museum"]
+    for i, subtreevalue in enumerate(subtreevalues):
+        lockindex, locksolved = struct.unpack_from("hh", DATA, 0x0ef4+(i+1)*4) 
+        solved = str(locksolved == 0)
+        paperize_tree.item(subtreevalue, values=(solved))
+def save_paperize_data():
+    if not paperize_edit_enabled.get(): return
+    # regular
+    subtreeroot, subtreevalues = paperize_tree_nodes["regular"]
+    for i, subtreevalue in enumerate(subtreevalues):
+        solved, unknown, item = paperize_tree.item(subtreevalue, "values")
+        solved = solved == "True"
+        locksolved = 0 if solved else 255
+        if not unknown.isnumeric() or not unknown.isascii(): continue
+        locktype = int(unknown)
+        lockitem = ITEM_INDEX_LOOKUP[item] if item in ITEM_INDEX_LOOKUP else -1
+        lockindex = i+1 if solved else 0
+        struct.pack_into("hhhh", DATA, 0x11f8+(i+1)*8, locktype, lockindex, locksolved, lockitem)
+    # museum
+    subtreeroot, subtreevalues = paperize_tree_nodes["museum"]
+    solvedcount = 0
+    for i, subtreevalue in enumerate(subtreevalues):
+        solved = paperize_tree.item(subtreevalue, "values")[0]
+        solved = solved == "True"
+        locksolved = 0 if solved else 255
+        lockindex = i+1 if solved else 0
+        struct.pack_into("hh", DATA, 0x0ef4+(i+1)*4, lockindex, locksolved)
+        if solved: solvedcount += 1
+    struct.pack_into("i", DATA, 0x11f4, solvedcount)
+
+INIT_CALLBACKS.append(load_paperize_data)
+CHANGE_CALLBACKS.append(save_paperize_data)
+
+category_tab("DEFEATED NPCS")
+defeated_enemies_frame = tk.Frame(CURRENT_TAB_ROOT)
+defeated_enemies_tree = ttk.Treeview(defeated_enemies_frame, columns=("encounter", "defeated"))#, height=26)
+defeated_enemies_tree.heading("#0", text="npc")
+defeated_enemies_tree.column("#0", width=192, stretch=False)
+defeated_enemies_tree.heading("encounter", text="encounter")
+defeated_enemies_tree.heading("defeated", text="defeated")
+defeated_enemies_tree.column("defeated", width=64, stretch=False)
+
+defeated_enemies_tree_v_scrollbar = ttk.Scrollbar(defeated_enemies_frame, orient=tk.VERTICAL, command=defeated_enemies_tree.yview)
+defeated_enemies_tree.configure(yscrollcommand=defeated_enemies_tree_v_scrollbar.set)
+
+defeated_enemies_tree.pack(side="left", fill="both", expand=True)
+defeated_enemies_tree_v_scrollbar.pack(side="right", fill="y")
+defeated_enemies_frame.pack(fill="both",expand=True)
+
+MAP_NPC_IDS_TEMP = {}
+#for k in MAP_NPC_IDS: 
+#    MAP_NPC_IDS_TEMP[k] = {}
+#    for l in MAP_NPC_IDS[k]:
+#        MAP_NPC_IDS_TEMP[k][k+": "+l] = MAP_NPC_IDS[k][l]
+#for k in MAP_NPC_IDS_TEMP: 
+#    for l in MAP_NPC_IDS_TEMP:
+#        if l.startswith(k): 
+#            for v in MAP_NPC_IDS_TEMP[l]:
+#                MAP_NPC_IDS_TEMP[k][v] = MAP_NPC_IDS_TEMP[l][v]
+for level in MAP_NAMES:
+    for k in MAP_NAMES[level]:
+        MAP_NPC_IDS_TEMP[k] = {}
+        for l in MAP_NPC_IDS:
+            if l.startswith(k):
+                p = f"{l.removeprefix(k).removeprefix('_')}: " if k != l else ""
+                for v in MAP_NPC_IDS[l]:
+                    MAP_NPC_IDS_TEMP[k][p + v] = MAP_NPC_IDS[l][v]
+#MAP_NPC_IDS_TEMP = MAP_NPC_IDS # fallback if the new system breaks
+
+MAP_NPC_ID_AREAS = ["[EMPTY]"]
+MAP_NPC_ID_AREAS.extend([k for k in MAP_NPC_IDS_TEMP.keys()])
+
+ttk.Label(CURRENT_TAB_ROOT, text="Defeated NPCs will not spawn anymore. This list is cleared every time Mario returns to the world map.").pack()
+ttk.Label(CURRENT_TAB_ROOT, text="Some maps handle NPC list selection via script. The NPCs from those lists might not be listed correctly.").pack()
+
+DEFEATED_ENEMIES_CLEANUP_FN = None
+defeated_enemies_tree_items = {}
+
+def defeated_enemies_tree_item_level_root_changed(item):
+    levelname = defeated_enemies_tree.item(item, "text")
+    last_levelname, children = defeated_enemies_tree_items[item]
+    if last_levelname == levelname: return # nothing changed
+    defeated_enemies_tree_items[item][0] = levelname
+    for c in children:
+        defeated_enemies_tree.delete(c)
+    children.clear()
+    if levelname not in MAP_NPC_IDS_TEMP: return
+    for enemy in MAP_NPC_IDS_TEMP[levelname]:
+        children.append(defeated_enemies_tree.insert(item, "end", text=enemy, values=[MAP_NPC_IDS_TEMP[levelname][enemy][0], "False"]))
+
+def defeated_enemies_tree_edit_cell(event):
+    global DEFEATED_ENEMIES_CLEANUP_FN
+    item = defeated_enemies_tree.identify_row(event.y)
+    column = defeated_enemies_tree.identify_column(event.x)
+    if not item or not column:
+        return
+    index = int(column[1:]) - 1
+    x, y, width, height = defeated_enemies_tree.bbox(item, column)
+
+    values = defeated_enemies_tree.item(item, "values")
+    if index == 0: return
+    if len(values) == 0 and index != -1: return
+    if len(values) == 2 and index != 1: return
+    if index == 1:
+        values = list(defeated_enemies_tree.item(item, "values"))
+        values[1] = values[1] == "False"
+        defeated_enemies_tree.item(item, values=values)
+        defeated_enemies_tree.focus()
+        return
+    elif index == -1:
+        entry = ttk.Combobox(defeated_enemies_tree, values=MAP_NPC_ID_AREAS, height=32)
+        entry.place(x=x, y=y, width=width, height=height)
+        entry.insert(0, defeated_enemies_tree.item(item, "text"))
+        entry.select_range(0, "end")
+        entry.focus()
+    else:
+        print("INVALID")
+        return
+
+    def save(event=None):
+        global DEFEATED_ENEMIES_CLEANUP_FN
+        DEFEATED_ENEMIES_CLEANUP_FN = None
+        #values = list(defeated_enemies_tree.item(item, "values"))
+        #values[index] = entry.get()
+        defeated_enemies_tree.item(item, text=entry.get())
+        defeated_enemies_tree.focus()
+        entry.destroy()
+        defeated_enemies_tree_item_level_root_changed(item)
+
+    entry.bind("<Return>", save)
+    entry.bind("<Escape>", lambda e: entry.destroy())
+    DEFEATED_ENEMIES_CLEANUP_FN = save
+
+defeated_enemies_tree.bind("<1>", lambda e: DEFEATED_ENEMIES_CLEANUP_FN() if DEFEATED_ENEMIES_CLEANUP_FN else None)
+defeated_enemies_tree.bind("<3>", defeated_enemies_tree_edit_cell)
+defeated_enemies_tree.bind("<Double-1>", defeated_enemies_tree_edit_cell)
+
+for i in range(17):
+    subtreeroot = defeated_enemies_tree.insert("", "end", text="[TODO]")
+    defeated_enemies_tree_items[subtreeroot] = ["[TODO]", []]
+
+def load_defeated_enemies():
+    for i, subtreeroot in enumerate(defeated_enemies_tree_items):
+        lastname, items = defeated_enemies_tree_items[subtreeroot]
+        buffer = DATA[0x1fc8+i*104:0x1fc8+(i+1)*104]
+        length = 0
+        maxlength = 104
+        while length <= maxlength and buffer[length] != 0:
+            length += 1
+        if length > maxlength:
+            raise ValueError("STRING TOO LONG")
+        level = buffer[:length].decode("utf8")
+        if level == "": level = "[EMPTY]"
+        length += 1 # null terminator
+        while length % 4 != 0: length += 1 # alignment
+        defeated_enemies_tree.item(subtreeroot, text=level)
+        defeated_enemies_tree_item_level_root_changed(subtreeroot)
+        if level not in MAP_NPC_IDS_TEMP: continue
+            #print("l", level)
+        npcs = MAP_NPC_IDS_TEMP[level]
+        current_defeated_npcs = []
+        while length < 104:
+            current_defeated_npcs.append(struct.unpack_from("i", buffer, length)[0])
+            length += 4
+
+        for item in items:
+            #print("i", item)
+            encounter, identifier = ("", 0)
+            name = defeated_enemies_tree.item(item, "text")
+            encounter2, defeated = defeated_enemies_tree.item(item, "values")
+            if name in npcs:
+                encounter, identifier = npcs[name]
+            if identifier == 0: continue
+            defeated_enemies_tree.item(item, values=[encounter2, str(identifier in current_defeated_npcs)])
+def save_defeated_enemies():
+    for i, subtreeroot in enumerate(defeated_enemies_tree_items):
+        lastname, items = defeated_enemies_tree_items[subtreeroot]
+        buffer = bytearray(104)
+        level = defeated_enemies_tree.item(subtreeroot, "text")
+        if level == "[EMPTY]": level = ""
+        if level in MAP_NPC_IDS_TEMP:
+            #print("l", level)
+            npcs = MAP_NPC_IDS_TEMP[level]
+            #print("n", npcs)
+            encoded = level.encode("utf8")
+            encoded += b"\0"
+            l = len(encoded)
+            buffer[0:l] = encoded
+            while l % 4 != 0: l += 1
+            for item in items:
+                #print("i", item)
+                encounter, identifier = ("", 0)
+                name = defeated_enemies_tree.item(item, "text")
+                encounter2, defeated = defeated_enemies_tree.item(item, "values")
+                #print(name, defeated)
+                if name in npcs:
+                    encounter, identifier = npcs[name]
+                #print(encounter, identifier)
+                if identifier == 0: continue
+                if defeated != "True": continue
+                if l >= 104:
+                    print(f"ENCODING TOO MANY NPCS, IGNORING {name}")
+                    break
+                struct.pack_into("i", buffer, l, identifier)
+                l += 4
+        DATA[0x1fc8+i*104:0x1fc8+(i+1)*104] = buffer
+        
+INIT_CALLBACKS.append(load_defeated_enemies)
+CHANGE_CALLBACKS.append(save_defeated_enemies)
+
+# experimental
 def add_theming():
     style = ttk.Style(root)
-    def change_theme(a=None,b=None):
-        #print(a,b)
-        if theme_box.current() != -1:
-            style.theme_use(theme_box.get())
-        return True
-    theme_box = ttk.Combobox(file_controls, validate="all", postcommand=change_theme, validatecommand=change_theme, xscrollcommand=change_theme)
-    theme_box["values"] = [name for name in style.theme_names()]
-    theme_box.set("default")
-    theme_box.grid(row=0, column=3, columnspan=2)
-    ttk.Label(file_controls, text="UI Theme").grid(row=0, column=2)
+    theme_menu = tk.Menu(menubar)
+    for name in style.theme_names():
+        theme_menu.add_command(label=name, command=lambda name=name:style.theme_use(name))
+    menubar.add_cascade(label="UI Theme", menu=theme_menu)
 #add_theming() # this does not do anything useful but may be useful in the future
 
 if len(sys.argv) > 1 and sys.argv[1].endswith(".bin") and os.path.isfile(sys.argv[1]): 

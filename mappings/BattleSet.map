@@ -1,6 +1,12 @@
+# naming scheme adapted from https://github.com/Longboost/battle-set-exporter
+
 StructLengthParam:22:_3:_2:NONULLTERM # EnemyCount = len(data)
 NullTerminator:22:_2 # enemies in encounter are null terminated
 GlobalNullTerminator:enemySetDataTable # encounter list itself is null terminated
+
+GlobalArrayType:enemySetDataTable:15:22:-1
+StructArrayType:22:2:21
+
 :21:EnemyData
 21:0:3:enemy
 21:1:8:position

@@ -1,5 +1,15 @@
 # built based on https://papermariotkb.wiki.gg/wiki/Sticker_Star_KDM_Reference
 
+# experimental and thus a toggle
+SIMPLIFY_ARRAYS_WHERE_POSSIBLE = True # semi stable
+# try to add debug output to simplified version
+TYPEOUTPUT_FORCE_DEBUG = False # unstable
+# experimental: further unwrap arrays with only one element
+TYPEOUTPUT_UNWRAP_POINTERS = False # unstable
+# store type information in struct instead of in extra array
+TYPEOUTPUT_KDM_ITEM_DATA_FIX = True # semi stable
+
+# TODO: option to mark and unwrap single item arrays (pointers to structs)
 # TODO: change structlengthparams to int offsets instead of the current name based system
 
 class BinReader():
@@ -116,8 +126,8 @@ KDM_FILE_BUILTIN_TYPE_STRUCT_IDS = [
     "?", # 0x04 	Boolean 	0x1 	0x1
     "I", # 0x05 			
     "I", # 0x06 			
-    "B", # 0x07 	Byte (8-bit integer) 	0x1 	0x1
-    "H", # 0x08 	Short (16-bit integer) 	0x2 	0x2
+    "b", # 0x07 	Byte (8-bit integer) 	0x1 	0x1
+    "h", # 0x08 	Short (16-bit integer) 	0x2 	0x2
     "I", # 0x09 			
     "I", # 0x0A 	Pointer to array of Floats 	0x4 	0x4
     "I", # 0x0B 	GUESS: Pointer to array of ints	0x4	0x4
@@ -170,9 +180,12 @@ class KDMMapping:
     nullterminations: dict[int, list[str]] = {}
     nullterminations_int: dict[int, list[int]] = {}
     removenullterminations_int: dict[int, list[int]] = {}
-    names: dict[int, tuple[str,list[tuple[int, str]]]] = {}
+    names: dict[int, tuple[str, list[tuple[int, str]]]] = {}
+    global_arraytypes: dict[str, list[int]] = {}
+    struct_arraytypes: dict[int, dict[int,list[int]]] = {}
     original_file: str = None # path to the file this has been loaded from
-    def load_from_file(path: str, original_file: None|str = None):
+    def load_from_file(path: str):
+        basepath = __file__.replace("kdm.py", "mappings/").replace("kdmparse.py", "mappings/")
         self = KDMMapping()
         self.lengthparams = {}
         self.structlengthparams = {}
@@ -180,10 +193,12 @@ class KDMMapping:
         self.nullterminations = {}
         self.nullterminations_int = {}
         self.removenullterminations_int = {}
-        self.original_file = original_file
+        self.original_file = path
+        self.global_arraytypes = {}
+        self.struct_arraytypes = {}
         removenullterminations = {}
         self.names = {}
-        with open(path, "r") as f:
+        with open(basepath + path, "r") as f:
             for line in f:
                 line = line.removesuffix("\n").removesuffix("\r").split("#")[0]
                 line = line.replace(" ", "").replace("\t", "") # ignore whitespace
@@ -217,6 +232,26 @@ class KDMMapping:
                     if l[0] not in self.structlengthparams:
                         self.structlengthparams[l[0]] = {}
                     self.structlengthparams[l[0]][l[1]] = (l[2], l[3] != "NONULLTERM" if len(l) > 3 else True)
+                elif line.startswith("GlobalArrayType:"):
+                    # struct, length, array
+                    l = line.removeprefix("GlobalArrayType:").split(":")
+                    tablename = l[0]
+                    if tablename not in self.global_arraytypes:
+                        self.global_arraytypes[tablename] = {}
+                    self.global_arraytypes[tablename] = [int(v) for v in l[1:]]
+                    if not TYPEOUTPUT_UNWRAP_POINTERS and self.global_arraytypes[tablename][-1] == -1:
+                        self.global_arraytypes[tablename].pop()
+                elif line.startswith("StructArrayType:"):
+                    # struct, length, array
+                    l = line.removeprefix("StructArrayType:").split(":")
+                    structid = int(l[0])
+                    structfield = int(l[1])
+                    arraysubtype = [int(v) for v in l[2:]]
+                    if structid not in self.struct_arraytypes:
+                        self.struct_arraytypes[structid] = {}
+                    self.struct_arraytypes[structid][structfield] = arraysubtype
+                    if not TYPEOUTPUT_UNWRAP_POINTERS and self.struct_arraytypes[structid][structfield][-1] == -1:
+                        self.struct_arraytypes[structid][structfield].pop()
                 elif line.startswith(":"):
                     l = line.removeprefix(":").split(":")
                     l[0] = int(l[0])
@@ -291,20 +326,25 @@ class KDMMapping:
             return KDM_FILE_BUILTIN_DATA_TYPE_NAMES[type_id]
         else:
             return self.names[type_id][0]
-    def load_for_file(path: str):
-        filename = path.replace("\\", "/").split("/")[-1]
+    def load_for_file(kdmfile): # kdmfile: KDMFile
+        tablenames = [kdmfile.deref_stringptr_direct(int(tablename.split(":")[1])) for tablename in kdmfile.data_table_section]
+        return KDMMapping.load_for_tablenames(tablenames)
+    def load_for_tablenames(tablenames: list[str]):
+        if len(tablenames) == 0: tablenames = ["[NONE]"] # kdm_sample.bin
         basepath = __file__.replace("kdm.py", "mappings/").replace("kdmparse.py", "mappings/")
         with open(basepath + "mappings.txt") as f:
             for line in f:
                 l = line.removesuffix("\n").removesuffix("\r").split(":")
-                if l[0] == filename and l[1] != "IGNORED":
-                    return KDMMapping.load_from_file(basepath + l[1], filename)
+                if l[0] in tablenames:
+                    return KDMMapping.load_from_file(l[1])
     def to_dict(self) -> dict:
         result = {}
         result["LengthParams"] = self.lengthparams
         result["StructLengthParams"] = self.structlengthparams
         result["NullTerminations"] = self.nullterminations
         result["GlobalNullTerminations"] = self.global_nullterminations
+        result["GlobalArrayTypes"] = self.global_arraytypes
+        result["StructArrayTypes"] = self.struct_arraytypes
         result["StructDefs"] = self.names
         return result
 
@@ -444,19 +484,19 @@ class KDMFile:
     named_parameters: list[KDMParameter]
     structure_definitions: list[KDMStructureDefinition]
     data_section: list[KDMDataArray]
-    data_table_section: dict[str, int] # TODO: are these arrays or array indices
+    data_table_section: dict[str, KDMDataArray] # TODO: are these arrays or array indices
     section7: list[()] # unknown (should have len 0)
 
     def __init__(self):
-        self.header = None
+        self.header: KDMHeader = None
         self.strings = {}
-        self.section1 = []
-        self.section2 = []
-        self.named_parameters = []
-        self.structure_definitions = []
-        self.data_section = []
-        self.data_table_section = {}
-        self.section7 = []
+        self.section1: list[()] = []
+        self.section2: list[()] = []
+        self.named_parameters: list[KDMParameter] = []
+        self.structure_definitions: list[KDMStructureDefinition] = []
+        self.data_section: list[KDMDataArray] = []
+        self.data_table_section: dict[str, KDMDataArray] = {}
+        self.section7: list[()] = []
 
     def dbgprint(self):
         print(f"Header:{self.header.header}|Version:{self.header.version}|Offsets:{self.header.offsets}")
@@ -475,6 +515,30 @@ class KDMFile:
             print(name, end=" - ")
             self.data_table_section[name].dbgprint()
     
+    # check for arrays which all contain the same value type
+    # -> mark those in the mapping files
+    def dumptypemappings(self):
+        tabletypes: dict[str, int] = {}
+        structmembertypes: dict[tuple[int, int], int] = {}
+        for tablename in self.data_table_section:
+            table: KDMDataArray = self.data_table_section[tablename]
+            # -1: undetermined table type
+            tabletype = -1
+            for v in table.values:
+                if v is None: continue
+                if type(v) != tuple or type(v[1]) != KDMDataArray: continue
+                if tabletype == -1: 
+                    tabletype = v[1].value_type_id
+                elif tabletype != v[1].value_type_id:
+                    tabletype = -1
+                    break
+            tabletypes[self.deref_stringptr_direct(int(tablename.split(":")[1]))] = tabletype
+        for tablename in tabletypes:
+            tabletype = tabletypes[tablename]
+            if tabletype != -1:
+                print(f"GlobalArrayType:{tablename}:{tabletype}")
+        pass # TODO: complete or do manually
+
     def dumpstructmappings(self):
         for s in self.structure_definitions:
             # local variable for type annotations
@@ -528,8 +592,53 @@ class KDMFile:
             return 1
         return self.deref_structdef(datatype).total_field_count
 
-    def to_dict(self, mapping: KDMMapping, debug: bool = False):
-        result = {"<KdmMetadata>":mapping.original_file if mapping.original_file is not None and not debug else mapping.to_dict()}
+    def struct_unwrap_arrays_recursive(self, mapping: KDMMapping, struct: dict, structtype: int): 
+        if "<KdmArrayValues>" in struct: raise ValueError(f"TEMP{struct}") # failsafe
+        for index, (fieldtype, fieldname) in enumerate(mapping.names[structtype][1]):
+            if fieldtype > 20:
+                self.struct_unwrap_arrays_recursive(mapping, struct[fieldname], fieldtype)
+            if structtype in mapping.struct_arraytypes and index in mapping.struct_arraytypes[structtype]:
+                struct[fieldname] = self.unwrap_array_recursive(mapping, struct[fieldname], mapping.struct_arraytypes[structtype][index])
+            elif fieldname in struct and type(struct[fieldname]) == dict and "<KdmArrayValues>" in struct[fieldname]:
+                struct[fieldname] = self.unwrap_array_recursive(mapping, struct[fieldname], [])
+    def unwrap_array_recursive(self, mapping: KDMMapping, array: dict, expected_types: list[int]):
+        if type(array) != dict or "<KdmArrayValues>" not in array: return array
+        arraytype = array["<KdmArrayType>"]
+        values = array["<KdmArrayValues>"]
+        if arraytype > 20:
+            isfirst = True
+            for v in values:
+                if v is None: continue
+                self.struct_unwrap_arrays_recursive(mapping, v, arraytype)
+                if TYPEOUTPUT_FORCE_DEBUG:
+                    v["<KdmType>"] = mapping.names[array["<KdmArrayType>"]][0]
+                    v["<KdmLen>"] = len(array["<KdmArrayValues>"])
+                    isfirst = False
+        if expected_types != [] and arraytype == expected_types[0]:
+            for i in range(len(values)):
+                values[i] = self.unwrap_array_recursive(mapping, values[i], expected_types[1:])
+            if TYPEOUTPUT_UNWRAP_POINTERS and expected_types[1:] == [-1] and len(values) == 1:
+                return values[0]
+            return values
+        elif TYPEOUTPUT_KDM_ITEM_DATA_FIX and len(values)>0 and type(values[0]) == dict and "<KdmArrayValues>" not in values[0]:
+            # fallback: unwrap the last still wrapped pointer (kdm_item_data variant)
+            values[0]["<KdmValueType>"] = arraytype
+            for i in range(len(values)):
+                values[i] = self.unwrap_array_recursive(mapping, values[i], expected_types[1:])
+            return values
+        else:
+            #print("Wrapped struct left over. Check mapping and fix.")
+            # unknown, try to catch back up at the next struct
+            for i in range(len(values)):
+                values[i] = self.unwrap_array_recursive(mapping, values[i], [])
+        return array
+
+    def to_dict(self, debug: bool = False):
+        mapping: KDMMapping = KDMMapping.load_for_file(self)
+        result = {}
+        if debug:
+            result["<KdmMetadata>"] = mapping.original_file if mapping.original_file is not None and not debug else mapping.to_dict()
+        #result = {"<KdmMetadata>":mapping.original_file if mapping.original_file is not None and not debug else mapping.to_dict()}
         #result = {"<KdmMetadata>": mapping.to_dict()}
         for p in self.named_parameters:
             param: KDMParameter = p
@@ -546,11 +655,27 @@ class KDMFile:
                 if array.values[l-1] is None:
                     array.values.pop()
             result[self.strings[int(tablename.split(":")[1])]] = array.to_dict(self, mapping, stored_arrays, debug)
-        #print(result)
+        
+        if not SIMPLIFY_ARRAYS_WHERE_POSSIBLE or debug: return result
+        for key in result:
+            if key == "<KdmMetadata>": continue
+            value = result[key]
+            if type(value) != dict: continue
+            if not "<KdmArrayValues>" in value:
+                self.struct_unwrap_arrays_recursive(mapping, value)
+                continue
+            if key in mapping.global_arraytypes:
+                result[key] = self.unwrap_array_recursive(mapping, result[key], mapping.global_arraytypes[key])
+            else:
+                result[key] = self.unwrap_array_recursive(mapping, result[key], [])
+
         return result
-    def to_json(self, mapping: KDMMapping, debug:bool = False):
+    def to_json(self, debug:bool = False):
         import json
-        return json.dumps(self.to_dict(mapping, debug), sort_keys=False, indent=1, ensure_ascii=False)
+        return json.dumps(self.to_dict(debug), sort_keys=False, indent=1, ensure_ascii=False)
+    def to_json_file(self, file, debug:bool = False):
+        import json
+        return json.dump(self.to_dict(debug), file, sort_keys=False, indent=1, ensure_ascii=False)
 
 def kdm_file_read_header(file: KDMFile, reader: BinReader) -> KDMHeader:
     """read header data from reader and raise error if values are unexpected"""
@@ -621,9 +746,11 @@ def kdm_file_parse_value(file: KDMFile, reader: BinReader, value_type: int) -> K
                 return (f"<{value_type}:APTR:{ptr}>", file.deref_arrayptr(ptr))
             # 16 bit value types
             case 8: 
+                return struct.unpack(KDM_FILE_BUILTIN_TYPE_STRUCT_IDS[value_type], reader.read_bytes(2))[0]
                 return reader.read_u16()
             # 8 bit value types
             case 7:
+                return struct.unpack(KDM_FILE_BUILTIN_TYPE_STRUCT_IDS[value_type], reader.read_bytes(1))[0]
                 return reader.read_u8()
             case 4:
                 return reader.read_bool()
@@ -822,13 +949,14 @@ class KDMWriter:
         self.structlengths = {}
         self.current_unique_id = 0
 
-    def init_from_json(json_data: str): 
+    def init_from_json(json_data: str):
         import json
         # todo: use hooks?
         return KDMWriter(json.loads(json_data))
-    def init_from_json_path(json_path: str): 
+    def init_from_json_path(json_path: str):
+        import json
         with open(json_path) as f:
-            return KDMWriter.init_from_json(f.read())
+            return KDMWriter(json.load(f))
 
     def add_empty_bytes(self, count: int):
         self.output += bytes(count)
@@ -870,8 +998,10 @@ class KDMWriter:
         struct.pack_into("I", self.output, 8, 10) # store start of string table (divided by 4)
 
     def read_metadata(self):
-        if type(self.data["<KdmMetadata>"]) == str:
-            self.data["<KdmMetadata>"] = KDMMapping.load_for_file(self.data["<KdmMetadata>"]).to_dict()
+        if "<KdmMetadata>" not in self.data:
+            self.data["<KdmMetadata>"] = KDMMapping.load_for_tablenames([k for k in self.data]).to_dict()
+        elif type(self.data["<KdmMetadata>"]) == str:
+            self.data["<KdmMetadata>"] = KDMMapping.load_from_file(self.data["<KdmMetadata>"]).to_dict()
         metadata = self.data["<KdmMetadata>"]
         
         for i in range(21):
@@ -1063,9 +1193,69 @@ class KDMWriter:
             self.offset = len(self.output)
         return self.structtable[to_store]
     
+    def wrap_arrays_recursive_struct(self, metadata, struct, structtype):
+        if type(struct) != dict: return # failsafe
+        m = metadata["StructArrayTypes"][structtype] if structtype in metadata["StructArrayTypes"] else None
+        for fieldid, (fieldtype, fieldname) in enumerate(metadata["StructDefs"][structtype][1]):
+            if fieldname not in struct: continue # ignored length parameters in simple json output
+            if fieldtype > 20:
+                self.wrap_arrays_recursive_struct(metadata, struct[fieldname], fieldtype)
+            elif m is not None and fieldid in m and (type(struct[fieldname]) == list or (TYPEOUTPUT_UNWRAP_POINTERS and m[fieldid][1:] == [-1])):
+                arraytypes = m[fieldid]
+                struct[fieldname] = {"<KdmArrayType>": arraytypes[0], "<KdmArrayValues>": struct[fieldname]}
+                if TYPEOUTPUT_UNWRAP_POINTERS and arraytypes[1:] == [-1]:
+                    struct[fieldname]["<KdmArrayValues>"] = [struct[fieldname]["<KdmArrayValues>"]]
+                self.wrap_arrays_recursive(metadata, struct[fieldname], arraytypes[1:])
+            elif type(struct[fieldname]) == dict and "<KdmArrayType>"in struct[fieldname]:
+                self.wrap_arrays_recursive(metadata, struct[fieldname], [])
+            elif type(struct[fieldname]) == list and len(struct[fieldname]) > 0 and type(struct[fieldname][0]) == dict and "<KdmValueType>" in struct[fieldname][0]:
+                struct[fieldname] = {"<KdmArrayType>": struct[fieldname][0]["<KdmValueType>"], "<KdmArrayValues>": struct[fieldname]}
+                if TYPEOUTPUT_UNWRAP_POINTERS and arraytypes[1:] == [-1]:
+                    struct[fieldname]["<KdmArrayValues>"] = [struct[fieldname]["<KdmArrayValues>"]]
+                self.wrap_arrays_recursive(metadata, struct[fieldname], [])
+    def wrap_arrays_recursive(self, metadata, array, nexttypes):
+        # TODO: if there are any issues related to nexttype -1: LOOK HERE!!!
+        if TYPEOUTPUT_UNWRAP_POINTERS and nexttypes == [-1] and not "<KdmArrayValues>" in array:
+            return
+        for i in range(len(array["<KdmArrayValues>"])):
+            value = array["<KdmArrayValues>"][i]
+            if TYPEOUTPUT_UNWRAP_POINTERS and nexttypes[1:] == [-1] and type(value) == dict: 
+                value = [value]
+                array["<KdmArrayValues>"][i] = value
+            if type(value) == list and nexttypes != []:
+                nexttype = nexttypes[0]
+                value = {"<KdmArrayType>": nexttype, "<KdmArrayValues>": array["<KdmArrayValues>"][i]}
+                array["<KdmArrayValues>"][i] = value
+            if type(value) == dict and "<KdmArrayType>" in value:
+                self.wrap_arrays_recursive(metadata, value, nexttypes[1:])
+            elif type(value) == dict:
+                self.wrap_arrays_recursive_struct(metadata, value, array["<KdmArrayType>"])
+
     # TODO: apply struct nullterminations and struct lengthparams here as well
     def fix_up_arrays(self):
         metadata = self.data["<KdmMetadata>"]
+
+        for k in [k for k in metadata["StructDefs"].keys()]:
+            metadata["StructDefs"][int(k)] = metadata["StructDefs"][k]
+
+        # ensure all indices for struct_arraytypes are numeric
+        for struct in metadata["StructArrayTypes"]:
+            for field in [f for f in metadata["StructArrayTypes"][struct].keys()]:
+                metadata["StructArrayTypes"][struct][int(field)] = metadata["StructArrayTypes"][struct][field]
+        # TODO: array unwrapping / wrapping
+        for key in self.data:
+            if key == "<KdmMetadata>": continue
+            if key in metadata["GlobalArrayTypes"]:
+                if TYPEOUTPUT_UNWRAP_POINTERS and metadata["GlobalArrayTypes"][key][1:] == [-1]:
+                    self.data[key] = [self.data[key]]
+                if type(self.data[key]) == list:
+                    self.data[key] = {"<KdmArrayType>": metadata["GlobalArrayTypes"][key][0], "<KdmArrayValues>": self.data[key]}
+                self.wrap_arrays_recursive(metadata, self.data[key], metadata["GlobalArrayTypes"][key][1:])
+            elif type(self.data[key]) == list: 
+                raise ValueError(f"Unrecognized list {key}")
+            elif type(self.data[key]) == dict and "<KdmArrayType>" in self.data[key]:
+                self.wrap_arrays_recursive(metadata, self.data[key], [])
+
         for key in self.data:
             if key == "<KdmMetadata>": continue
             if type(self.data[key]) != dict: continue
@@ -1143,54 +1333,60 @@ def save(path: str, d: dict) -> bytearray:
         import copy
         f.write(KDMWriter(copy.deepcopy(d)).to_binary())
 def load(path: str, debug: bool = False) -> dict:
-    return kdm_file_from_file(BinReader.from_path(path)).to_dict(KDMMapping.load_for_file(path.split("/")[-1]), debug)
+    return kdm_file_from_file(BinReader.from_path(path)).to_dict(debug)
 
 # old kdmparse/main.py
 if __name__ == "__main__":
     from sys import argv
-    UNSUPPORTED_FILES = [
-        "EventCamera.bin",
-        "TitleData.bin",
-        "EventCamera.json",
-        "TitleData.json",
-        "EventCamera.2json",
-        "TitleData.2json",
-    ]
-    filename = argv[1].split("/")[-1]
-    if filename in UNSUPPORTED_FILES:
-        print("This file is not a valid KDM file as far as I know and thus unsupported.")
-        exit(1)
-    if (len(argv) <= 2 and filename.endswith(".bin")) or argv[2] == "dbgprint":
-        FILE = kdm_file_from_file(BinReader.from_path(argv[1]))
-        # TEMPORARY
-        FILE.refcheck() # warn about unused references below
-        FILE.dbgprint()
-    elif argv[2] == "dumpstructmappings":
-        FILE = kdm_file_from_file(BinReader.from_path(argv[1]))
-        FILE.dumpstructmappings()
-    elif argv[2] == "json":
-        FILE = kdm_file_from_file(BinReader.from_path(argv[1]))
-        FILE.refcheck()
-        MAPPING = KDMMapping.load_for_file(filename if len(argv) <= 4 else argv[4])
-        if MAPPING is None:
-            print("file name does not match mapping, please specify file name in 4th parameter")
-            exit(1)
-        print(FILE.to_json(MAPPING, len(argv)>3 and argv[3]=="DEBUG"))
-    elif argv[2] == "tojson":
-        FILE = kdm_file_from_file(BinReader.from_path(argv[1]))
-        FILE.refcheck()
-        MAPPING = KDMMapping.load_for_file(filename if len(argv) <= 5 else argv[5])
-        if MAPPING is None:
-            print("file name does not match mapping, please specify file name in 4th parameter")
-            exit(1)
-        with open(argv[3], "w") as f:
-            f.write(FILE.to_json(MAPPING, len(argv)>4 and argv[4]=="DEBUG"))
-    elif argv[2] == "refcheck":
-        FILE = kdm_file_from_file(BinReader.from_path(argv[1]))
-        FILE.refcheck(True)
-    elif argv[2] == "tobin":
-        FILE = KDMWriter.init_from_json_path(argv[1])
-        with open(argv[3], "wb") as f:
-            f.write(FILE.to_binary())
-    else:
-        print(f"usage: {sys.argv[0]} [file.bin / file.json] [tobin/tojson] [output] [DEBUG/NODEBUG] (filename_for_mapping)")
+    import json
+    
+    if len(argv) <= 1 or argv[1] in ["--help", "help", "-h", "-?", "--?"]:
+        selfname = argv[0] if len(argv) != 0 else "kdm.py"
+        print(f"usage: python3 {selfname} [COMMAND]")
+        print("Avaliable commands:")
+        print("tojson [kdmpath] [jsonpath] (DEBUG)\n convert kdm file to json\n DEBUG for more verbose json")
+        print("tobin [jsonpath] [kdmpath]\n convert json to kdm file")
+        print("dbgprint\n legacy: print kdm arrays one by one")
+        print("if no command is specified, this script will try to batch convert all provided files")
+        exit(0)
+    command = argv[1]
+    match command:
+        case "tobin": 
+            f = KDMWriter.init_from_json_path(argv[2])
+            with open(argv[3], "wb") as o:
+                o.write(f.to_binary())
+        case "tojson": 
+            f = kdm_file_from_path(argv[2])
+            with open(argv[3], "w") as o:
+                f.to_json_file(o, len(argv)>4 and argv[4]=="DEBUG")
+        case "json": 
+            f = kdm_file_from_path(argv[2])
+            print(f.to_json(len(argv)>3 and argv[3]=="DEBUG"))
+        case "dbgprint": 
+            f = kdm_file_from_path(argv[2])
+            f.refcheck()
+            f.dbgprint()
+        case "refcheck": 
+            f = kdm_file_from_path(argv[2])
+            f.refcheck(True)
+        case "dumpstructmappings": 
+            f = kdm_file_from_path(argv[2])
+            f.dumpstructmappings()
+            f.dumptypemappings()
+        case _:
+            # convert all applicable files
+            files = argv[1:]
+            for f in files:
+                if f.endswith(".bin"): # to json
+                    o = f.removesuffix(".bin") + ".json"
+                    f = kdm_file_from_path(f)
+                    with open(o, "w") as o:
+                        f.to_json_file(o)
+                elif f.endswith(".json"): # to kdm
+                    o = f.removesuffix(".json") + "_re.bin"
+                    f = KDMWriter.init_from_json_path(f)
+                    with open(o, "wb") as o:
+                        o.write(f.to_binary())
+                else: # unknown
+                    # todo: better error handling
+                    print(f"unknown file extension: {f}")

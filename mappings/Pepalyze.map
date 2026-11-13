@@ -1,5 +1,10 @@
 GlobalNullTerminator:lockDataTable
 GlobalNullTerminator:secretDataTable
+
+GlobalArrayType:lockDataTable:15:21
+GlobalArrayType:secretDataTable:15:22
+GlobalArrayType:secretSealDataTable:15:23
+
 :21:Pepalyze
 21:0:3:Name
 21:1:1:ID

@@ -3,6 +3,11 @@ StructLengthParam:29:_4:_3
 StructLengthParam:29:_6:_5
 StructLengthParam:29:_8:_7
 StructLengthParam:29:_10:_9
+
+GlobalArrayType:map_object_data_tbl:15:29
+StructArrayType:29:7:27
+StructArrayType:29:9:28
+
 :21:UnusedStruct21
 21:0:3:Unknown_String_0
 21:1:13:Unknown_StringArray_1

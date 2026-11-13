@@ -1,6 +1,11 @@
 NullTerminator:23:_1
 StructLengthParam:23:_2:_1:NONULLTERM
 GlobalNullTerminator:envDataTable
+
+GlobalArrayType:envDataTable:15:23
+StructArrayType:23:1:22
+StructArrayType:22:7:21
+
 :21:UnknownStruct_21
 21:0:0:Unknown_Float_0
 21:1:0:Unknown_Float_1

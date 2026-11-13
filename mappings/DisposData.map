@@ -21,6 +21,36 @@ NullTerminator:42:_1
 NullTerminator:42:_3
 NullTerminator:42:_5
 NullTerminator:42:_7
+
+GlobalArrayType:all_disposDataTbl:15:42
+StructArrayType:42:1:15:31 # encounters
+#TODO
+StructArrayType:42:3:15:35 # npcs
+StructArrayType:35:1:34
+StructArrayType:34:16:31
+StructArrayType:31:1:30
+StructArrayType:42:5:15:38 # mapobjects
+StructArrayType:38:1:36
+StructArrayType:36:10:29
+StructArrayType:29:4:24
+StructArrayType:29:5:28
+StructArrayType:28:0:26
+StructArrayType:26:1:25
+StructArrayType:27:1:26 # contains 26 in 1 location
+StructArrayType:28:1:27
+StructArrayType:24:0:22
+StructArrayType:22:1:21
+StructArrayType:24:1:23
+StructArrayType:23:1:22
+StructArrayType:36:11:33
+StructArrayType:42:7:15:40 # mapitems
+StructArrayType:40:1:39
+StructArrayType:39:2:29
+StructArrayType:39:9:33
+StructArrayType:42:9:41 # PreloadTable?
+StructArrayType:41:0:3
+StructArrayType:41:1:3
+
 :21:ListItem
 21:0:3:ListItemValue
 21:1:3:ListItemName

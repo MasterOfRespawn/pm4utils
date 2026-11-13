@@ -1,5 +1,9 @@
 LengthParam:link_data_all_len:link_data_all
 StructLengthParam:22:LinkCount:Links
+
+GlobalArrayType:link_data_all:15:22
+StructArrayType:22:1:15:21
+
 :21:Link
 # 0 for bero transition (regular transition) (just transitions)
 # exit popup question is ignored

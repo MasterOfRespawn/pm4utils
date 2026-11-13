@@ -5,6 +5,17 @@ GlobalNullTerminator:groupDataTable
 GlobalNullTerminator:townWorldMapDataTable
 GlobalNullTerminator:effectDataTable
 GlobalNullTerminator:changeBGMDataTable
+
+GlobalArrayType:setup3DDataTable:15:21
+GlobalArrayType:battleBgmDataTable:15:25
+GlobalArrayType:trackVolumeDataTable:15:26
+StructArrayType:26:1:0
+StructArrayType:26:2:0
+GlobalArrayType:groupDataTable:15:27
+GlobalArrayType:townWorldMapDataTable:15:28
+GlobalArrayType:effectDataTable:15:29
+GlobalArrayType:changeBGMDataTable:15:30
+
 :21:UnknownStruct_21
 21:0:3:Unknown_String_0
 21:1:0:Unknown_Float_1

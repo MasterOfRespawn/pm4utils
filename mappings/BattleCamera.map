@@ -1,4 +1,7 @@
 GlobalNullTerminator:eventCameraDataTable
+
+GlobalArrayType:eventCameraDataTable:15:21:-1
+
 :21:Camera
 21:0:3:Name
 21:1:8:Unknown_Short_1

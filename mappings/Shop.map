@@ -5,6 +5,15 @@ GlobalNullTerminator:SHOP_SNOW
 GlobalNullTerminator:SHOP_KAZAN
 GlobalNullTerminator:SHOP_KOOPA
 GlobalNullTerminator:SHOP_MONO
+
+GlobalArrayType:SHOP_TOWN:15:21
+GlobalArrayType:SHOP_IWA:15:21
+GlobalArrayType:SHOP_DOR:15:21
+GlobalArrayType:SHOP_SNOW:15:21
+GlobalArrayType:SHOP_KAZAN:15:21
+GlobalArrayType:SHOP_KOOPA:15:21
+GlobalArrayType:SHOP_MONO:15:21
+
 :21:ShopItem
 21:0:3:StickerName
 21:1:3:RequiredFlag

@@ -12,3 +12,6 @@ On Windows tkinter should be included with python.
 Download the latest [release](https://github.com/MasterOfRespawn/pm4utils/releases/latest).
 Run `python3 saveedit.py` or double click `saveedit.py` if you are on Windows.
 NOTE: This script can not create save files, it can only edit them. You will need to load a vaild save file first.
+
+### Save file documentation
+A work in progress documentation of the save file structure can be found [here](./savefile.md)

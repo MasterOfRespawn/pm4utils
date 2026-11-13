@@ -1,5 +1,9 @@
 LengthParam:pasteDataTblLen:pasteDataTbl
 LengthParam:paperDataTblLen:paperDataTbl
+
+GlobalArrayType:pasteDataTbl:15:21
+GlobalArrayType:paperDataTbl:15:22
+
 :21:UnknownStruct_21
 21:0:3:Unknown_String_0
 21:1:1:Unknown_Int_1

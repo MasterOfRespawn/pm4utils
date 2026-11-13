@@ -1,5 +1,9 @@
 GlobalNullTerminator:commonModelDataTable
 NullTerminator:21:_1
+
+GlobalArrayType:commonModelDataTable:15:21:-1
+StructArrayType:21:1:3
+
 :21:MapModelData
 21:0:3:MapName
 21:1:13:ModelNames

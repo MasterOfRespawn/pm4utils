@@ -1,6 +1,11 @@
 LengthParam:XML_TYPE_NUM:xml_type_data_list
 StructLengthParam:22:_3:_2
 StructLengthParam:23:_3:_2
+
+GlobalArrayType:xml_type_data_list:23
+StructArrayType:23:2:22
+StructArrayType:22:2:21
+
 :21:Animation
 21:0:3:Name
 21:1:3:Description

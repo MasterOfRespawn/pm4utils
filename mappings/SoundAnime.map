@@ -1,6 +1,10 @@
 GlobalNullTerminator:animeSoundDataTable
 NullTerminator:22:_10
 StructLengthParam:22:_11:_10:NONULLTERM
+
+GlobalArrayType:animeSoundDataTable:15:22
+StructArrayType:22:10:21
+
 :21:UnknownStruct_21
 21:0:3:Unknown_String_0
 21:1:1:Unknown_Int_1

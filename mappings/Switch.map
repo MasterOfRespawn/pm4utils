@@ -5,6 +5,15 @@ GlobalNullTerminator:asSwitchTable
 GlobalNullTerminator:afSwitchTable
 GlobalNullTerminator:msSwitchTable
 GlobalNullTerminator:mfSwitchTable
+
+GlobalArrayType:gsseqSwitchTable:21
+GlobalArrayType:gsSwitchTable:21
+GlobalArrayType:gfSwitchTable:21
+GlobalArrayType:asSwitchTable:21
+GlobalArrayType:afSwitchTable:21
+GlobalArrayType:msSwitchTable:21
+GlobalArrayType:mfSwitchTable:21
+
 :21:Switch
 21:0:3:Name
 21:1:1:Offset
